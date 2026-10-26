@@ -2,6 +2,8 @@
 
 from collections import Counter
 from collections.abc import Iterable
+import codecs
+import hashlib
 import json
 from pathlib import Path
 
@@ -84,6 +86,20 @@ class BPETokenizer:
     def vocab_size(self) -> int:
         return len(self._vocabulary)
 
+    @property
+    def fingerprint(self) -> str:
+        """Return a stable digest for checking model/tokenizer pairing."""
+        digest = hashlib.sha256()
+        for token in self._vocabulary:
+            digest.update(len(token).to_bytes(4, byteorder="big"))
+            digest.update(token)
+        digest.update(b"\xff")
+        for left, right in self._merges:
+            for token in (left, right):
+                digest.update(len(token).to_bytes(4, byteorder="big"))
+                digest.update(token)
+        return digest.hexdigest()
+
     def encode(self, text: str) -> list[int]:
         """Convert text to token IDs; every UTF-8 input character is representable."""
         sequence = [bytes([value]) for value in text.encode("utf-8")]
@@ -111,6 +127,66 @@ class BPETokenizer:
                 raise ValueError(f"Token ID is outside the vocabulary: {token_id}")
             token_bytes.extend(self._vocabulary[token_id])
         return token_bytes.decode("utf-8")
+
+    def valid_next_token_ids(
+        self,
+        token_ids: Iterable[int],
+        require_complete: bool = False,
+        max_remaining_tokens: int | None = None,
+    ) -> list[int]:
+        """Return tokens that keep a generated UTF-8 byte stream valid."""
+        if (
+            max_remaining_tokens is not None
+            and (
+                isinstance(max_remaining_tokens, bool)
+                or not isinstance(max_remaining_tokens, int)
+                or max_remaining_tokens < 0
+            )
+        ):
+            raise ValueError("max_remaining_tokens must be a non-negative integer")
+
+        prefix = bytearray()
+        for token_id in token_ids:
+            if isinstance(token_id, bool) or not isinstance(token_id, int):
+                raise TypeError("Token IDs must be integers")
+            if not 0 <= token_id < self.vocab_size:
+                raise ValueError(f"Token ID is outside the vocabulary: {token_id}")
+            prefix.extend(self._vocabulary[token_id])
+
+        decoder_type = codecs.getincrementaldecoder("utf-8")
+        decoder = decoder_type(errors="strict")
+        decoder.decode(prefix, final=False)
+        decoder_state = decoder.getstate()
+        valid_ids = []
+        for token_id, token in enumerate(self._vocabulary):
+            candidate_decoder = decoder_type(errors="strict")
+            candidate_decoder.setstate(decoder_state)
+            try:
+                candidate_decoder.decode(token, final=False)
+                pending_bytes = candidate_decoder.getstate()[0]
+                required_continuations = 0
+                if pending_bytes:
+                    lead_byte = pending_bytes[0]
+                    sequence_length = (
+                        2 if 0xC2 <= lead_byte <= 0xDF else
+                        3 if 0xE0 <= lead_byte <= 0xEF else
+                        4 if 0xF0 <= lead_byte <= 0xF4 else
+                        0
+                    )
+                    required_continuations = sequence_length - len(pending_bytes)
+                if require_complete and pending_bytes:
+                    continue
+                if (
+                    max_remaining_tokens is not None
+                    and required_continuations > max_remaining_tokens
+                ):
+                    continue
+                if require_complete:
+                    candidate_decoder.decode(b"", final=True)
+            except UnicodeDecodeError:
+                continue
+            valid_ids.append(token_id)
+        return valid_ids
 
     def save(self, path: Path) -> None:
         """Save the tokenizer vocabulary and merge rules as UTF-8 JSON."""

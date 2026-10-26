@@ -18,6 +18,28 @@ class BPETokenizerTests(unittest.TestCase):
 
         self.assertEqual(tokenizer.decode(tokenizer.encode("È una prova 🙂")), "È una prova 🙂")
 
+    def test_valid_next_tokens_preserve_utf8_and_can_finish_partial_characters(self) -> None:
+        tokenizer = BPETokenizer.train(["ciao"], vocab_size=256)
+        continuation_ids = tokenizer.valid_next_token_ids([0xC3])
+        final_continuation_ids = tokenizer.valid_next_token_ids(
+            [0xC3],
+            require_complete=True,
+        )
+        four_byte_lead = tokenizer.valid_next_token_ids(
+            [],
+            max_remaining_tokens=2,
+        )
+        enough_for_four_byte_character = tokenizer.valid_next_token_ids(
+            [],
+            max_remaining_tokens=3,
+        )
+
+        self.assertIn(0xA9, continuation_ids)
+        self.assertNotIn(ord("A"), continuation_ids)
+        self.assertIn(0xA9, final_continuation_ids)
+        self.assertNotIn(0xF0, four_byte_lead)
+        self.assertIn(0xF0, enough_for_four_byte_character)
+
     def test_training_is_deterministic(self) -> None:
         texts = ["abc abc", "abd abd"]
         first = BPETokenizer.train(texts, vocab_size=265)

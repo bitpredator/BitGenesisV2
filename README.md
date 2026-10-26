@@ -57,8 +57,9 @@ split, keeping each document in one split. The standard-library BPE tokenizer
 learns byte merges from training documents. Its 256 base tokens cover every
 UTF-8 input, including characters absent from the training corpus. `vocab_size`
 sets the maximum vocabulary size (minimum 256); the learned vocabulary can be
-smaller when the corpus has too few distinct merges. The tokenizer can be saved
-locally under `data/models/`, which is ignored by Git:
+smaller when the corpus has too few distinct merges. Generation constrains
+sampled tokens to valid UTF-8. The tokenizer can be saved locally under
+`data/models/`, which is ignored by Git:
 
 ```python
 from bitgenesis.config import load_config
@@ -73,13 +74,16 @@ tokenizer.save(config.models_dir / "tokenizer.json")
 ```
 
 The validation documents are kept separate from tokenizer training. This step
-only prepares and tokenizes text; it does not train a language model.
+also includes an experimental, small decoder-only Transformer that can be
+trained locally from random initialization. See [install.md](install.md) for
+the optional PyTorch setup and the commands for training and text generation.
 
 ## Status
 
 Under development. The terminal interface is a basic placeholder, not an AI model.
 Local corpus loading, splitting, and byte-level BPE tokenization are available;
-language-model training is not implemented yet.
+experimental local Transformer training and text generation are available.
+This small prototype is not a capable conversational assistant.
 
 ## License
 
