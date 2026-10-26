@@ -42,8 +42,10 @@ python -m bitgenesis
 ```
 
 The initial interface accepts Italian text and exits when you type `esci` (or
-`exit`, `quit`, or `uscita`). It does not generate AI responses yet; it clearly
-reports that the model has not been trained.
+`exit`, `quit`, or `uscita`). After you train a conversation model, it loads
+the local checkpoint and tokenizer, uses previous turns in the current session
+as context, and generates replies. Without a trained conversation model, it
+explains how to train one.
 
 ## Local text data and tokenizer
 
@@ -82,10 +84,10 @@ for training and response generation.
 
 ## Status
 
-Under development. The terminal interface is a basic placeholder, not an AI model.
-Local corpus loading, splitting, and byte-level BPE tokenization are available;
-experimental local Transformer training and text generation are available.
-This small prototype is not a capable conversational assistant.
+Under development. Local corpus loading, splitting, byte-level BPE
+tokenization, experimental Transformer training, and interactive chat with a
+local conversation checkpoint are available. The small prototype is not a
+capable or reliable conversational assistant.
 
 ## License
 

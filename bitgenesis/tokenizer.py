@@ -1,7 +1,7 @@
 """A deterministic byte-level BPE tokenizer implemented with the standard library."""
 
 from collections import Counter
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 import codecs
 import hashlib
 import json
@@ -169,15 +169,35 @@ class BPETokenizer:
         pieces.append(token_bytes.decode("utf-8"))
         return "".join(pieces)
 
-    def encode_chat_prompt(self, user_message: str) -> list[int]:
-        """Encode a user message followed by the assistant response prefix."""
+    def encode_chat_prompt(
+        self,
+        user_message: str,
+        history: Sequence[tuple[str, str]] = (),
+    ) -> list[int]:
+        """Encode prior turns and a new user message for assistant generation."""
         if not user_message.strip():
             raise ValueError("User message must not be empty")
-        return [
-            self.special_token_id("<|user|>"),
-            *self.encode(user_message),
-            self.special_token_id("<|assistant|>"),
-        ]
+        encoded: list[int] = []
+        for user_turn, assistant_turn in history:
+            if not user_turn.strip() or not assistant_turn.strip():
+                raise ValueError("Conversation history must contain non-empty messages")
+            encoded.extend(
+                (
+                    self.special_token_id("<|user|>"),
+                    *self.encode(user_turn),
+                    self.special_token_id("<|assistant|>"),
+                    *self.encode(assistant_turn),
+                    self.special_token_id("<|end|>"),
+                )
+            )
+        encoded.extend(
+            (
+                self.special_token_id("<|user|>"),
+                *self.encode(user_message),
+                self.special_token_id("<|assistant|>"),
+            )
+        )
+        return encoded
 
     def encode_conversation(self, conversation: Conversation) -> list[int]:
         """Encode user/assistant turns from a :class:`Conversation`."""

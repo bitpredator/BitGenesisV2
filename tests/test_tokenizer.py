@@ -54,6 +54,21 @@ class BPETokenizerTests(unittest.TestCase):
         self.assertEqual(loaded.vocab_size, 259)
         self.assertEqual(loaded.decode(prompt), "<|user|>Ciao<|assistant|>")
 
+    def test_chat_prompt_includes_prior_user_assistant_turns(self) -> None:
+        tokenizer = BPETokenizer.train(
+            ["Ciao", "Salve", "Come stai?", "Bene"], vocab_size=256
+        )
+
+        prompt = tokenizer.encode_chat_prompt(
+            "Come stai?",
+            history=[("Ciao", "Salve")],
+        )
+
+        self.assertEqual(
+            tokenizer.decode(prompt),
+            "<|user|>Ciao<|assistant|>Salve<|end|><|user|>Come stai?<|assistant|>",
+        )
+
     def test_valid_next_tokens_preserve_utf8_and_can_finish_partial_characters(
         self,
     ) -> None:

@@ -3,6 +3,7 @@
 import argparse
 from collections.abc import Sequence
 import math
+from pathlib import Path
 import sys
 
 import torch
@@ -13,11 +14,46 @@ from bitgenesis.tokenizer import BPETokenizer
 from bitgenesis.training import load_checkpoint
 
 
+class ConversationChat:
+    """Load a local conversation model once and reuse it for a chat session."""
+
+    def __init__(self, model_path: Path, tokenizer_path: Path) -> None:
+        self.tokenizer = BPETokenizer.load(tokenizer_path)
+        self.model = load_checkpoint(
+            model_path,
+            device="cpu",
+            tokenizer=self.tokenizer,
+        )
+        if self.model.training_format != "conversations":
+            raise ValueError(
+                "Interactive chat requires a model trained with "
+                "--data-format conversations"
+            )
+
+    def reply(
+        self,
+        prompt: str,
+        history: Sequence[tuple[str, str]] = (),
+        *,
+        max_new_tokens: int = 80,
+        temperature: float = 1.0,
+    ) -> str:
+        return generate_from_model(
+            self.model,
+            self.tokenizer,
+            prompt,
+            history=history,
+            max_new_tokens=max_new_tokens,
+            temperature=temperature,
+        )
+
+
 def generate_from_model(
     model: BitGenesisLM,
     tokenizer: BPETokenizer,
     prompt: str,
     *,
+    history: Sequence[tuple[str, str]] = (),
     max_new_tokens: int = 80,
     temperature: float = 1.0,
 ) -> str:
@@ -28,7 +64,10 @@ def generate_from_model(
     if not prompt:
         raise ValueError("Prompt must not be empty")
 
-    prompt_ids = torch.tensor([tokenizer.encode_chat_prompt(prompt)], dtype=torch.long)
+    prompt_ids = torch.tensor(
+        [tokenizer.encode_chat_prompt(prompt, history)],
+        dtype=torch.long,
+    )
     prompt_length = prompt_ids.shape[1]
     end_token_id = tokenizer.special_token_id("<|end|>")
     first_special_token_id = tokenizer.special_token_id("<|user|>")
@@ -113,6 +152,25 @@ def generate_text(
         model,
         tokenizer,
         prompt,
+        max_new_tokens=max_new_tokens,
+        temperature=temperature,
+    )
+
+
+def generate_chat_reply(
+    prompt: str,
+    model_path: str | Path,
+    tokenizer_path: str | Path,
+    *,
+    history: Sequence[tuple[str, str]] = (),
+    max_new_tokens: int = 80,
+    temperature: float = 1.0,
+) -> str:
+    """Generate a reply only from a checkpoint trained on conversations."""
+    chat = ConversationChat(Path(model_path), Path(tokenizer_path))
+    return chat.reply(
+        prompt,
+        history=history,
         max_new_tokens=max_new_tokens,
         temperature=temperature,
     )

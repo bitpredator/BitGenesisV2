@@ -54,8 +54,11 @@ Start the terminal interface:
 python -m bitgenesis
 ```
 
-The current interface acknowledges messages but does not generate AI responses.
-Type `esci` to exit.
+Type `esci` to exit. After training a conversation model as described below,
+`python -m bitgenesis` loads the local checkpoint and tokenizer and generates
+responses during the session. It reports a clear message if either artifact is
+missing. Previous user/assistant turns are included in subsequent prompts
+during the session; conversation history is not saved after exit.
 
 ## Add local training data
 
