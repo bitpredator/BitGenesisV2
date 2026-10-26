@@ -1,0 +1,6 @@
+[app]
+language = "it"
+
+[paths]
+datasets = "data/datasets"
+models = "data/models"
