@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from bitgenesis.corpus import load_corpus, split_corpus
+from bitgenesis.corpus import load_conversations, load_corpus, split_corpus
 
 
 class LoadCorpusTests(unittest.TestCase):
@@ -60,6 +60,64 @@ class SplitCorpusTests(unittest.TestCase):
             split_corpus(["solo documento"])
         with self.assertRaisesRegex(ValueError, "validation_fraction"):
             split_corpus(["a", "b"], validation_fraction=1)
+
+
+class LoadConversationsTests(unittest.TestCase):
+    def test_loads_jsonl_conversations_recursively_in_stable_order(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            (root / "second.jsonl").write_text(
+                '{"messages":[{"role":"user","content":"Ciao"},{"role":"assistant","content":"Salve"}]}\n',
+                encoding="utf-8",
+            )
+            nested = root / "nested"
+            nested.mkdir()
+            (nested / "first.JSONL").write_text(
+                '{"messages":[{"role":"user","content":"Come va?"},'
+                '{"role":"assistant","content":"Bene."},'
+                '{"role":"user","content":"Grazie"},{"role":"assistant","content":"Prego."}]}\n',
+                encoding="utf-8",
+            )
+            (root / "ignored.txt").write_text("not jsonl", encoding="utf-8")
+
+            conversations = load_conversations(root)
+
+        self.assertEqual(
+            conversations[0].turns,
+            (("Come va?", "Bene."), ("Grazie", "Prego.")),
+        )
+        self.assertEqual(conversations[1].turns, (("Ciao", "Salve"),))
+
+    def test_reports_invalid_json_and_invalid_message_roles(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            path = root / "invalid.jsonl"
+            path.write_text("{broken}\n", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "line 1"):
+                load_conversations(root)
+
+            path.write_text(
+                '{"messages":[{"role":"assistant","content":"Risposta"},'
+                '{"role":"user","content":"Domanda"}]}\n',
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ValueError, "role 'user'"):
+                load_conversations(root)
+
+    def test_rejects_unpaired_or_empty_conversations(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            path = root / "incomplete.jsonl"
+            path.write_text(
+                '{"messages":[{"role":"user","content":"Ciao"}]}\n',
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ValueError, "pairs"):
+                load_conversations(root)
+
+            path.write_text("", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "No non-empty conversations"):
+                load_conversations(root)
 
 
 if __name__ == "__main__":

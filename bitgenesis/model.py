@@ -3,6 +3,7 @@
 from collections.abc import Callable, Sequence
 from dataclasses import asdict, dataclass
 import math
+from typing import Literal
 
 import torch
 from torch import Tensor, nn
@@ -19,7 +20,13 @@ class ModelConfig:
     dropout: float = 0.1
 
     def __post_init__(self) -> None:
-        for name in ("vocab_size", "context_length", "embedding_dim", "num_heads", "num_layers"):
+        for name in (
+            "vocab_size",
+            "context_length",
+            "embedding_dim",
+            "num_heads",
+            "num_layers",
+        ):
             value = getattr(self, name)
             if isinstance(value, bool) or not isinstance(value, int) or value < 1:
                 raise ValueError(f"{name} must be a positive integer")
@@ -28,7 +35,9 @@ class ModelConfig:
         if self.embedding_dim % self.num_heads:
             raise ValueError("embedding_dim must be divisible by num_heads")
         if not 0 <= self.dropout < 1:
-            raise ValueError("dropout must be greater than or equal to 0 and less than 1")
+            raise ValueError(
+                "dropout must be greater than or equal to 0 and less than 1"
+            )
 
 
 class TransformerBlock(nn.Module):
@@ -74,14 +83,19 @@ class BitGenesisLM(nn.Module):
     def __init__(self, config: ModelConfig) -> None:
         super().__init__()
         self.config = config
+        self.training_format: Literal["text", "conversations"] = "text"
         self.token_embedding = nn.Embedding(config.vocab_size, config.embedding_dim)
-        self.position_embedding = nn.Embedding(config.context_length, config.embedding_dim)
+        self.position_embedding = nn.Embedding(
+            config.context_length, config.embedding_dim
+        )
         self.embedding_dropout = nn.Dropout(config.dropout)
         self.blocks = nn.ModuleList(
             TransformerBlock(config) for _ in range(config.num_layers)
         )
         self.final_norm = nn.LayerNorm(config.embedding_dim)
-        self.language_head = nn.Linear(config.embedding_dim, config.vocab_size, bias=False)
+        self.language_head = nn.Linear(
+            config.embedding_dim, config.vocab_size, bias=False
+        )
         self.apply(self._initialize_weights)
 
     @staticmethod
@@ -128,15 +142,27 @@ class BitGenesisLM(nn.Module):
         max_new_tokens: int,
         temperature: float = 1.0,
         allowed_token_ids: Callable[[Tensor], Sequence[int]] | None = None,
+        stop_token_id: int | None = None,
     ) -> Tensor:
         if token_ids.ndim != 2 or token_ids.shape[0] != 1:
-            raise ValueError("generation expects token_ids with shape (1, sequence_length)")
+            raise ValueError(
+                "generation expects token_ids with shape (1, sequence_length)"
+            )
         if token_ids.shape[1] < 1:
             raise ValueError("generation requires a non-empty prompt")
-        if isinstance(max_new_tokens, bool) or not isinstance(max_new_tokens, int) or max_new_tokens < 0:
+        if (
+            isinstance(max_new_tokens, bool)
+            or not isinstance(max_new_tokens, int)
+            or max_new_tokens < 0
+        ):
             raise ValueError("max_new_tokens must be a non-negative integer")
         if not math.isfinite(temperature) or temperature <= 0:
             raise ValueError("temperature must be a finite number greater than zero")
+        if (
+            stop_token_id is not None
+            and not 0 <= stop_token_id < self.config.vocab_size
+        ):
+            raise ValueError("stop_token_id is outside the model vocabulary")
 
         was_training = self.training
         self.eval()
@@ -149,9 +175,16 @@ class BitGenesisLM(nn.Module):
                 if allowed_token_ids is not None:
                     allowed = list(allowed_token_ids(generated))
                     if not allowed:
-                        raise ValueError("No allowed tokens are available for generation")
-                    if any(token_id < 0 or token_id >= self.config.vocab_size for token_id in allowed):
-                        raise ValueError("Allowed token ID is outside the model vocabulary")
+                        raise ValueError(
+                            "No allowed tokens are available for generation"
+                        )
+                    if any(
+                        token_id < 0 or token_id >= self.config.vocab_size
+                        for token_id in allowed
+                    ):
+                        raise ValueError(
+                            "Allowed token ID is outside the model vocabulary"
+                        )
                     allowed_mask = torch.zeros(
                         self.config.vocab_size,
                         dtype=torch.bool,
@@ -165,6 +198,8 @@ class BitGenesisLM(nn.Module):
                 probabilities = torch.softmax(next_token_logits, dim=-1)
                 next_token = torch.multinomial(probabilities, num_samples=1)
                 generated = torch.cat((generated, next_token), dim=1)
+                if stop_token_id is not None and next_token.item() == stop_token_id:
+                    break
         finally:
             self.train(was_training)
         return generated

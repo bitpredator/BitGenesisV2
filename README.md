@@ -13,7 +13,7 @@ BitGenesis is planned with these goals:
 - Develop and train its own model from scratch, running locally without externally hosted AI services.
 - Eventually become a Windows application.
 
-These are development goals; they have not been implemented yet.
+These goals are under active development.
 
 ## Configuration
 
@@ -56,10 +56,11 @@ The corpus utilities support a reproducible document-level training/validation
 split, keeping each document in one split. The standard-library BPE tokenizer
 learns byte merges from training documents. Its 256 base tokens cover every
 UTF-8 input, including characters absent from the training corpus. `vocab_size`
-sets the maximum vocabulary size (minimum 256); the learned vocabulary can be
-smaller when the corpus has too few distinct merges. Generation constrains
-sampled tokens to valid UTF-8. The tokenizer can be saved locally under
-`data/models/`, which is ignored by Git:
+sets the maximum number of byte-level tokens (minimum 256); the tokenizer also
+reserves three conversation control tokens. The learned byte-level vocabulary
+can be smaller when the corpus has too few distinct merges. Generation
+constrains sampled tokens to valid UTF-8. The tokenizer can be saved locally
+under `data/models/`, which is ignored by Git:
 
 ```python
 from bitgenesis.config import load_config
@@ -76,7 +77,8 @@ tokenizer.save(config.models_dir / "tokenizer.json")
 The validation documents are kept separate from tokenizer training. This step
 also includes an experimental, small decoder-only Transformer that can be
 trained locally from random initialization. See [install.md](install.md) for
-the optional PyTorch setup and the commands for training and text generation.
+the optional PyTorch setup, structured conversation data format, and commands
+for training and response generation.
 
 ## Status
 

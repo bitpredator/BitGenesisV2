@@ -2,6 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from bitgenesis.corpus import Conversation
 from bitgenesis.tokenizer import BPETokenizer
 
 
@@ -13,12 +14,49 @@ class BPETokenizerTests(unittest.TestCase):
         self.assertEqual(tokenizer.decode(tokenizer.encode(text)), text)
         self.assertGreater(tokenizer.vocab_size, 256)
 
-    def test_representable_bytes_cover_characters_not_seen_during_training(self) -> None:
+    def test_representable_bytes_cover_characters_not_seen_during_training(
+        self,
+    ) -> None:
         tokenizer = BPETokenizer.train(["ciao"], vocab_size=256)
 
-        self.assertEqual(tokenizer.decode(tokenizer.encode("È una prova 🙂")), "È una prova 🙂")
+        self.assertEqual(
+            tokenizer.decode(tokenizer.encode("È una prova 🙂")), "È una prova 🙂"
+        )
 
-    def test_valid_next_tokens_preserve_utf8_and_can_finish_partial_characters(self) -> None:
+    def test_conversation_tokens_mark_roles_and_response_end(self) -> None:
+        tokenizer = BPETokenizer.train(["Ciao", "Salve"], vocab_size=256)
+        conversation = Conversation(turns=(("Ciao", "Salve"),))
+
+        encoded = tokenizer.encode_conversation(conversation)
+
+        self.assertEqual(encoded[0], tokenizer.special_token_id("<|user|>"))
+        self.assertIn(tokenizer.special_token_id("<|assistant|>"), encoded)
+        self.assertEqual(encoded[-1], tokenizer.special_token_id("<|end|>"))
+        self.assertIn("<|user|>", tokenizer.decode(encoded))
+        self.assertIn("<|assistant|>", tokenizer.decode(encoded))
+        assistant_prefix = tokenizer.special_token_id("<|assistant|>")
+        reply_start = encoded.index(assistant_prefix) + 1
+        self.assertEqual(
+            tokenizer.decode_chat_reply(encoded[reply_start:]),
+            tokenizer.decode(encoded[reply_start:-1]),
+        )
+
+    def test_chat_prompt_round_trips_through_tokenizer_save(self) -> None:
+        tokenizer = BPETokenizer.train(["Ciao"], vocab_size=256)
+        prompt = tokenizer.encode_chat_prompt("Ciao")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "tokenizer.json"
+            tokenizer.save(path)
+            loaded = BPETokenizer.load(path)
+
+        self.assertEqual(loaded.encode_chat_prompt("Ciao"), prompt)
+        self.assertEqual(loaded.vocab_size, 259)
+        self.assertEqual(loaded.decode(prompt), "<|user|>Ciao<|assistant|>")
+
+    def test_valid_next_tokens_preserve_utf8_and_can_finish_partial_characters(
+        self,
+    ) -> None:
         tokenizer = BPETokenizer.train(["ciao"], vocab_size=256)
         continuation_ids = tokenizer.valid_next_token_ids([0xC3])
         final_continuation_ids = tokenizer.valid_next_token_ids(
@@ -69,7 +107,7 @@ class BPETokenizerTests(unittest.TestCase):
 
         tokenizer = BPETokenizer.train(["ciao"], vocab_size=256)
         with self.assertRaisesRegex(ValueError, "outside the vocabulary"):
-            tokenizer.decode([256])
+            tokenizer.decode([tokenizer.vocab_size])
 
 
 if __name__ == "__main__":

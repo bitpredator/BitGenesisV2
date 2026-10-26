@@ -1,25 +1,27 @@
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import torch
 
+from bitgenesis.corpus import Conversation
+from bitgenesis.generate import generate_from_model, generate_text
 from bitgenesis.model import BitGenesisLM, ModelConfig
 from bitgenesis.tokenizer import BPETokenizer
 from bitgenesis.training import (
-    encode_documents,
+    encode_conversations,
     get_batch,
     load_checkpoint,
     save_checkpoint,
     train_model,
 )
-from bitgenesis.generate import generate_text
 
 
-def make_model() -> BitGenesisLM:
+def make_model(vocab_size: int = 256) -> BitGenesisLM:
     return BitGenesisLM(
         ModelConfig(
-            vocab_size=256,
+            vocab_size=vocab_size,
             context_length=8,
             embedding_dim=16,
             num_heads=4,
@@ -64,6 +66,46 @@ class BitGenesisLMTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "temperature"):
             model.generate(torch.ones((1, 2), dtype=torch.long), 1, temperature=0)
 
+    def test_generation_stops_after_end_token(self) -> None:
+        model = make_model()
+        end_token_id = 255
+
+        def predict_end(token_ids: torch.Tensor, targets: torch.Tensor | None = None):
+            logits = torch.zeros((token_ids.shape[0], token_ids.shape[1], 256))
+            logits[:, :, end_token_id] = 100
+            return logits, None
+
+        with patch.object(model, "forward", side_effect=predict_end):
+            generated = model.generate(
+                torch.tensor([[1, 2]]),
+                max_new_tokens=10,
+                stop_token_id=end_token_id,
+            )
+
+        self.assertEqual(generated.tolist(), [[1, 2, end_token_id]])
+
+    def test_conversation_generation_returns_only_assistant_reply(self) -> None:
+        tokenizer = BPETokenizer.train(["Ciao"], vocab_size=256)
+        model = make_model(tokenizer.vocab_size)
+        end_token_id = tokenizer.special_token_id("<|end|>")
+
+        def predict_end(token_ids: torch.Tensor, targets: torch.Tensor | None = None):
+            logits = torch.zeros(
+                (token_ids.shape[0], token_ids.shape[1], tokenizer.vocab_size)
+            )
+            logits[:, :, end_token_id] = 100
+            return logits, None
+
+        with patch.object(model, "forward", side_effect=predict_end):
+            reply = generate_from_model(
+                model,
+                tokenizer,
+                "Ciao",
+                max_new_tokens=10,
+            )
+
+        self.assertEqual(reply, "")
+
 
 class TrainingTests(unittest.TestCase):
     def test_batches_pair_each_input_with_next_token_target(self) -> None:
@@ -75,10 +117,18 @@ class TrainingTests(unittest.TestCase):
         self.assertTrue(torch.equal(inputs[:, 1:], targets[:, :-1]))
 
     def test_trains_saves_loads_and_generates(self) -> None:
-        tokenizer = BPETokenizer.train(["ciao bitgenesis", "salve bitgenesis"], vocab_size=256)
-        train_tokens = encode_documents(tokenizer, ["ciao bitgenesis " * 4])
-        validation_tokens = encode_documents(tokenizer, ["salve bitgenesis " * 4])
-        model = make_model()
+        tokenizer = BPETokenizer.train(
+            ["ciao bitgenesis", "salve bitgenesis"], vocab_size=256
+        )
+        train_conversation = Conversation(
+            turns=(("ciao bitgenesis", "salve bitgenesis"),)
+        )
+        validation_conversation = Conversation(turns=(("come stai", "sto bene"),))
+        train_tokens = encode_conversations(tokenizer, [train_conversation] * 4)
+        validation_tokens = encode_conversations(
+            tokenizer, [validation_conversation] * 4
+        )
+        model = make_model(tokenizer.vocab_size)
 
         history = train_model(
             model,
@@ -90,10 +140,15 @@ class TrainingTests(unittest.TestCase):
             eval_batches=1,
             seed=7,
         )
+        model.training_format = "conversations"
 
         self.assertEqual(len(history), 2)
-        self.assertTrue(all(torch.isfinite(torch.tensor(item["train"])) for item in history))
-        self.assertTrue(all(torch.isfinite(torch.tensor(item["validation"])) for item in history))
+        self.assertTrue(
+            all(torch.isfinite(torch.tensor(item["train"])) for item in history)
+        )
+        self.assertTrue(
+            all(torch.isfinite(torch.tensor(item["validation"])) for item in history)
+        )
 
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -104,7 +159,7 @@ class TrainingTests(unittest.TestCase):
             loaded_tokenizer = BPETokenizer.load(tokenizer_path)
             loaded_model = load_checkpoint(model_path, tokenizer=loaded_tokenizer)
             generated = generate_text(
-                "ciao",
+                "ciao bitgenesis",
                 str(model_path),
                 str(tokenizer_path),
                 max_new_tokens=2,
@@ -118,8 +173,10 @@ class TrainingTests(unittest.TestCase):
                 load_checkpoint(model_path, tokenizer=different_tokenizer)
 
         self.assertEqual(loaded_model.config, model.config)
+        self.assertEqual(loaded_model.training_format, "conversations")
         self.assertEqual(loaded_tokenizer.vocab_size, tokenizer.vocab_size)
-        self.assertTrue(generated.startswith("ciao"))
+        self.assertIsInstance(generated, str)
+        self.assertNotIn("<|", generated)
 
     def test_rejects_too_short_token_streams(self) -> None:
         with self.assertRaisesRegex(ValueError, "more tokens"):

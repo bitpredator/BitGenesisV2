@@ -57,27 +57,52 @@ python -m bitgenesis
 The current interface acknowledges messages but does not generate AI responses.
 Type `esci` to exit.
 
-## Add local training text
+## Add local training data
 
-Place UTF-8 `.txt` documents in `data\datasets\`. The directory and its
-contents are local and excluded from Git. Add at least two non-empty documents
-so BitGenesis can keep validation text separate from training text. Each split
-must also contain more tokens than the configured context length (128 by
-default).
+Training data stays in `data\datasets\`, which is excluded from Git. Only use
+material you have permission to use.
+
+For conversational training, create UTF-8 `.jsonl` files. Each non-empty line
+must contain a JSON object with a `messages` array made of alternating,
+non-empty user and assistant messages, starting with the user and ending with
+the assistant. A line may contain multiple turns:
+
+```json
+{"messages":[{"role":"user","content":"Ciao!"},{"role":"assistant","content":"Ciao, come posso aiutarti?"}]}
+{"messages":[{"role":"user","content":"Quanto fa 2 + 2?"},{"role":"assistant","content":"Fa 4."},{"role":"user","content":"E 3 + 3?"},{"role":"assistant","content":"Fa 6."}]}
+```
+
+Each JSONL line is one conversation, and files are loaded recursively in stable
+path order. The training pipeline splits whole conversations before learning
+the tokenizer, so validation conversations are not used to train it. At least
+two conversations are required for a non-empty validation split. Both splits
+must contain more tokens than the configured context length (128 by default).
+
+Plain UTF-8 `.txt` documents remain supported as an alternative. Select the
+input format explicitly using `--data-format text` or
+`--data-format conversations`.
 
 ## Train and generate text
 
-Start a training run from the repository root:
+Train with the JSONL conversation format from the repository root:
 
 ```powershell
-python -m bitgenesis.train --steps 1000
+python -m bitgenesis.train --data-format conversations --steps 1000
+```
+
+For plain-text `.txt` files instead, run:
+
+```powershell
+python -m bitgenesis.train --data-format text --steps 1000
 ```
 
 Training data and model artifacts are saved locally in the ignored `data`
 directory. The default model is intentionally small and CPU-oriented. Adjust
 the context length, model dimensions, batch size, and step count for your
 hardware and dataset. The training command prints periodic training and
-validation losses and a short generation sample.
+validation losses and a short generated reply. The tokenizer marks user and
+assistant roles and an end-of-response token; generation stops at that marker
+or when the token limit is reached.
 
 Generate text from a saved checkpoint later:
 

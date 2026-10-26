@@ -22,19 +22,68 @@ def generate_from_model(
     temperature: float = 1.0,
 ) -> str:
     if tokenizer.vocab_size != model.config.vocab_size:
-        raise ValueError("Tokenizer vocabulary size does not match the model checkpoint")
+        raise ValueError(
+            "Tokenizer vocabulary size does not match the model checkpoint"
+        )
+    if not prompt:
+        raise ValueError("Prompt must not be empty")
+
+    prompt_ids = torch.tensor([tokenizer.encode_chat_prompt(prompt)], dtype=torch.long)
+    prompt_length = prompt_ids.shape[1]
+    end_token_id = tokenizer.special_token_id("<|end|>")
+    first_special_token_id = tokenizer.special_token_id("<|user|>")
+
+    def allowed_tokens(sequence: torch.Tensor) -> list[int]:
+        generated_count = sequence.shape[1] - prompt_length
+        valid_ids = tokenizer.valid_next_token_ids(
+            sequence[0].tolist(),
+            max_remaining_tokens=max_new_tokens - generated_count - 1,
+        )
+        return [
+            token_id
+            for token_id in valid_ids
+            if token_id < first_special_token_id or token_id == end_token_id
+        ]
+
+    generated_ids = model.generate(
+        prompt_ids,
+        max_new_tokens,
+        temperature,
+        allowed_token_ids=allowed_tokens,
+        stop_token_id=end_token_id,
+    )
+    return tokenizer.decode_chat_reply(generated_ids[0, prompt_length:].tolist())
+
+
+def generate_text_from_model(
+    model: BitGenesisLM,
+    tokenizer: BPETokenizer,
+    prompt: str,
+    *,
+    max_new_tokens: int = 80,
+    temperature: float = 1.0,
+) -> str:
+    """Continue a plain-text prompt without conversation role markers."""
+    if tokenizer.vocab_size != model.config.vocab_size:
+        raise ValueError(
+            "Tokenizer vocabulary size does not match the model checkpoint"
+        )
     if not prompt:
         raise ValueError("Prompt must not be empty")
 
     prompt_ids = torch.tensor([tokenizer.encode(prompt)], dtype=torch.long)
-    prompt_length = prompt_ids.shape[1]
 
     def allowed_tokens(sequence: torch.Tensor) -> list[int]:
-        generated_count = sequence.shape[1] - prompt_length
-        return tokenizer.valid_next_token_ids(
-            sequence[0].tolist(),
-            max_remaining_tokens=max_new_tokens - generated_count - 1,
-        )
+        return [
+            token_id
+            for token_id in tokenizer.valid_next_token_ids(
+                sequence[0].tolist(),
+                max_remaining_tokens=max_new_tokens
+                - (sequence.shape[1] - prompt_ids.shape[1])
+                - 1,
+            )
+            if token_id < tokenizer.text_vocab_size
+        ]
 
     generated_ids = model.generate(
         prompt_ids,
@@ -55,7 +104,12 @@ def generate_text(
 ) -> str:
     tokenizer = BPETokenizer.load(tokenizer_path)
     model = load_checkpoint(model_path, device="cpu", tokenizer=tokenizer)
-    return generate_from_model(
+    generate = (
+        generate_from_model
+        if model.training_format == "conversations"
+        else generate_text_from_model
+    )
+    return generate(
         model,
         tokenizer,
         prompt,
@@ -68,9 +122,13 @@ def main(argv: Sequence[str] | None = None) -> None:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(errors="backslashreplace")
     config = load_config()
-    parser = argparse.ArgumentParser(description="Generate text with a local BitGenesis model.")
+    parser = argparse.ArgumentParser(
+        description="Generate text with a local BitGenesis model."
+    )
     parser.add_argument("--model", default=str(config.models_dir / "bitgenesis.pt"))
-    parser.add_argument("--tokenizer", default=str(config.models_dir / "tokenizer.json"))
+    parser.add_argument(
+        "--tokenizer", default=str(config.models_dir / "tokenizer.json")
+    )
     parser.add_argument("--prompt", required=True)
     parser.add_argument("--max-new-tokens", type=int, default=80)
     parser.add_argument("--temperature", type=float, default=1.0)

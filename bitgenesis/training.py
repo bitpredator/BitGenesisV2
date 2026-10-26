@@ -7,6 +7,7 @@ from pathlib import Path
 import torch
 from torch import Tensor
 
+from bitgenesis.corpus import Conversation
 from bitgenesis.model import BitGenesisLM, ModelConfig, model_config_to_dict
 from bitgenesis.tokenizer import BPETokenizer
 
@@ -19,6 +20,21 @@ def encode_documents(tokenizer: BPETokenizer, documents: Sequence[str]) -> Tenso
     return torch.tensor(tokenizer.encode(text), dtype=torch.long)
 
 
+def encode_conversations(
+    tokenizer: BPETokenizer,
+    conversations: Sequence[Conversation],
+) -> Tensor:
+    """Encode structured conversation turns and response-end markers."""
+    if not conversations:
+        raise ValueError("At least one conversation is required")
+    token_ids = [
+        token_id
+        for conversation in conversations
+        for token_id in tokenizer.encode_conversation(conversation)
+    ]
+    return torch.tensor(token_ids, dtype=torch.long)
+
+
 def get_batch(
     tokens: Tensor,
     batch_size: int,
@@ -29,9 +45,17 @@ def get_batch(
     """Sample input windows and their one-token-shifted next-token targets."""
     if tokens.ndim != 1:
         raise ValueError("tokens must be a one-dimensional tensor")
-    if isinstance(batch_size, bool) or not isinstance(batch_size, int) or batch_size < 1:
+    if (
+        isinstance(batch_size, bool)
+        or not isinstance(batch_size, int)
+        or batch_size < 1
+    ):
         raise ValueError("batch_size must be a positive integer")
-    if isinstance(context_length, bool) or not isinstance(context_length, int) or context_length < 1:
+    if (
+        isinstance(context_length, bool)
+        or not isinstance(context_length, int)
+        or context_length < 1
+    ):
         raise ValueError("context_length must be a positive integer")
     if tokens.numel() <= context_length:
         raise ValueError("token sequence must contain more tokens than context_length")
@@ -57,7 +81,11 @@ def estimate_loss(
     device: torch.device | str,
     generator: torch.Generator,
 ) -> dict[str, float]:
-    if isinstance(eval_batches, bool) or not isinstance(eval_batches, int) or eval_batches < 1:
+    if (
+        isinstance(eval_batches, bool)
+        or not isinstance(eval_batches, int)
+        or eval_batches < 1
+    ):
         raise ValueError("eval_batches must be a positive integer")
 
     was_training = model.training
@@ -80,7 +108,9 @@ def estimate_loss(
                     )
                     _, loss = model(inputs, targets)
                     if loss is None:
-                        raise RuntimeError("Model did not return a loss for labeled data")
+                        raise RuntimeError(
+                            "Model did not return a loss for labeled data"
+                        )
                     losses.append(loss)
                 results[name] = torch.stack(losses).mean().item()
     finally:
@@ -102,7 +132,12 @@ def train_model(
     device: torch.device | str = "cpu",
 ) -> list[dict[str, float]]:
     """Train from random initialization and return periodic loss measurements."""
-    for name, value in (("steps", steps), ("batch_size", batch_size), ("eval_interval", eval_interval), ("eval_batches", eval_batches)):
+    for name, value in (
+        ("steps", steps),
+        ("batch_size", batch_size),
+        ("eval_interval", eval_interval),
+        ("eval_batches", eval_batches),
+    ):
         if isinstance(value, bool) or not isinstance(value, int) or value < 1:
             raise ValueError(f"{name} must be a positive integer")
     if not math.isfinite(learning_rate) or learning_rate <= 0:
@@ -156,6 +191,8 @@ def save_checkpoint(
     """Save model configuration and weights as a local PyTorch checkpoint."""
     if model.config.vocab_size != tokenizer.vocab_size:
         raise ValueError("Tokenizer vocabulary size does not match the model")
+    if model.training_format not in ("text", "conversations"):
+        raise ValueError("Model has an invalid training format")
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary_path = path.with_name(f".{path.name}.tmp")
@@ -166,6 +203,7 @@ def save_checkpoint(
                 "model_config": model_config_to_dict(model.config),
                 "state_dict": model.state_dict(),
                 "tokenizer_fingerprint": tokenizer.fingerprint,
+                "training_format": model.training_format,
             },
             temporary_path,
         )
@@ -186,8 +224,14 @@ def load_checkpoint(
         raise ValueError("Unsupported or invalid model checkpoint")
     config_data = payload.get("model_config")
     state_dict = payload.get("state_dict")
+    training_format = payload.get("training_format", "text")
     if not isinstance(config_data, dict) or not isinstance(state_dict, dict):
         raise ValueError("Model checkpoint is missing its configuration or weights")
+    if not isinstance(training_format, str) or training_format not in (
+        "text",
+        "conversations",
+    ):
+        raise ValueError("Model checkpoint has an invalid training format")
     if tokenizer is not None:
         fingerprint = payload.get("tokenizer_fingerprint")
         if not isinstance(fingerprint, str) or fingerprint != tokenizer.fingerprint:
@@ -196,7 +240,15 @@ def load_checkpoint(
     try:
         config = ModelConfig(**config_data)
     except (TypeError, ValueError) as error:
-        raise ValueError("Model checkpoint has an invalid model configuration") from error
+        raise ValueError(
+            "Model checkpoint has an invalid model configuration"
+        ) from error
+    if tokenizer is not None and tokenizer.vocab_size != config.vocab_size:
+        raise ValueError(
+            "Tokenizer vocabulary size does not match the model checkpoint"
+        )
     model = BitGenesisLM(config)
     model.load_state_dict(state_dict, strict=True)
+    if training_format == "conversations":
+        model.training_format = "conversations"
     return model.to(device)
