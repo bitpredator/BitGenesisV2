@@ -19,6 +19,8 @@ These are development goals; they have not been implemented yet.
 
 The initial configuration is stored in [`config.toml`](config.toml). It sets Italian as the default language and defines local directories for datasets and model files.
 
+See [install.md](install.md) for Windows setup and verification instructions.
+
 The configuration loader requires Python 3.11 or newer and uses only the Python standard library:
 
 ```python
@@ -78,7 +80,6 @@ only prepares and tokenizes text; it does not train a language model.
 Under development. The terminal interface is a basic placeholder, not an AI model.
 Local corpus loading, splitting, and byte-level BPE tokenization are available;
 language-model training is not implemented yet.
-There is no released version or documented installation process yet.
 
 ## License
 
