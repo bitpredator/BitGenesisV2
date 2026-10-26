@@ -31,9 +31,22 @@ print(config.language)
 Relative paths in `config.toml` are resolved from the directory containing that file.
 Local secrets, virtual environments, datasets, and trained model files are excluded by `.gitignore`.
 
+## Run the terminal interface
+
+With Python 3.11 or newer, start BitGenesis from the repository root:
+
+```console
+python -m bitgenesis
+```
+
+The initial interface accepts Italian text and exits when you type `esci` (or
+`exit`, `quit`, or `uscita`). It does not generate AI responses yet; it clearly
+reports that the model has not been trained.
+
 ## Status
 
-Under development. There is no released version or documented installation process yet.
+Under development. The terminal interface is a basic placeholder, not an AI model.
+There is no released version or documented installation process yet.
 
 ## License
 
