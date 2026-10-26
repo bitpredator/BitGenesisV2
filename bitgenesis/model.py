@@ -129,9 +129,12 @@ class BitGenesisLM(nn.Module):
         if targets is not None:
             if targets.shape != token_ids.shape:
                 raise ValueError("targets must have the same shape as token_ids")
+            if not torch.any(targets != -100):
+                raise ValueError("targets must contain at least one supervised token")
             loss = functional.cross_entropy(
                 logits.reshape(-1, self.config.vocab_size),
                 targets.reshape(-1),
+                ignore_index=-100,
             )
         return logits, loss
 

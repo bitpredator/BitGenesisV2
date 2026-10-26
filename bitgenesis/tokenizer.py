@@ -201,11 +201,20 @@ class BPETokenizer:
 
     def encode_conversation(self, conversation: Conversation) -> list[int]:
         """Encode user/assistant turns from a :class:`Conversation`."""
+        token_ids, _ = self.encode_conversation_with_loss_mask(conversation)
+        return token_ids
+
+    def encode_conversation_with_loss_mask(
+        self,
+        conversation: Conversation,
+    ) -> tuple[list[int], list[bool]]:
+        """Encode turns and mark assistant response tokens as loss targets."""
         if not conversation.turns:
             raise ValueError(
                 "Conversation must contain at least one user/assistant turn"
             )
         encoded: list[int] = []
+        loss_mask: list[bool] = []
         for turn in conversation.turns:
             if (
                 not isinstance(turn, tuple)
@@ -219,10 +228,27 @@ class BPETokenizer:
                     "Conversation turns must contain non-empty user and assistant text"
                 )
             user_message, assistant_message = turn
-            encoded.extend(self.encode_chat_prompt(user_message))
-            encoded.extend(self.encode(assistant_message))
-            encoded.append(self.special_token_id("<|end|>"))
-        return encoded
+            user_tokens = self.encode(user_message)
+            assistant_tokens = self.encode(assistant_message)
+            encoded.extend(
+                (
+                    self.special_token_id("<|user|>"),
+                    *user_tokens,
+                    self.special_token_id("<|assistant|>"),
+                    *assistant_tokens,
+                    self.special_token_id("<|end|>"),
+                )
+            )
+            loss_mask.extend(
+                (
+                    False,
+                    *([False] * len(user_tokens)),
+                    False,
+                    *([True] * len(assistant_tokens)),
+                    True,
+                )
+            )
+        return encoded, loss_mask
 
     def decode_chat_reply(self, token_ids: Iterable[int]) -> str:
         """Decode assistant tokens until the end-of-response marker."""

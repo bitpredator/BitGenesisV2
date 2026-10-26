@@ -41,6 +41,24 @@ class BPETokenizerTests(unittest.TestCase):
             tokenizer.decode(encoded[reply_start:-1]),
         )
 
+    def test_conversation_loss_mask_selects_only_assistant_responses(self) -> None:
+        tokenizer = BPETokenizer.train(["Ciao", "Salve", "Come va", "Bene"], vocab_size=256)
+        conversation = Conversation(turns=(("Ciao", "Salve"), ("Come va", "Bene")))
+
+        encoded, loss_mask = tokenizer.encode_conversation_with_loss_mask(conversation)
+
+        self.assertEqual(len(encoded), len(loss_mask))
+        self.assertEqual(
+            tokenizer.decode([token for token, keep in zip(encoded, loss_mask) if keep]),
+            "Salve<|end|>Bene<|end|>",
+        )
+        for token, keep in zip(encoded, loss_mask):
+            if token in (
+                tokenizer.special_token_id("<|user|>"),
+                tokenizer.special_token_id("<|assistant|>"),
+            ):
+                self.assertFalse(keep)
+
     def test_chat_prompt_round_trips_through_tokenizer_save(self) -> None:
         tokenizer = BPETokenizer.train(["Ciao"], vocab_size=256)
         prompt = tokenizer.encode_chat_prompt("Ciao")

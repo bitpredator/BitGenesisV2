@@ -70,6 +70,8 @@ def main(argv: Sequence[str] | None = None) -> None:
         tokenizer = BPETokenizer.train(split.train, vocab_size=args.vocab_size)
         train_tokens = encode_documents(tokenizer, split.train)
         validation_tokens = encode_documents(tokenizer, split.validation)
+        train_target_mask = None
+        validation_target_mask = None
     else:
         conversations = load_conversations(args.data_dir)
         split = split_corpus(
@@ -84,8 +86,10 @@ def main(argv: Sequence[str] | None = None) -> None:
             for message in turn
         ]
         tokenizer = BPETokenizer.train(training_text, vocab_size=args.vocab_size)
-        train_tokens = encode_conversations(tokenizer, split.train)
-        validation_tokens = encode_conversations(tokenizer, split.validation)
+        train_tokens, train_target_mask = encode_conversations(tokenizer, split.train)
+        validation_tokens, validation_target_mask = encode_conversations(
+            tokenizer, split.validation
+        )
 
     model_config = ModelConfig(
         vocab_size=tokenizer.vocab_size,
@@ -102,6 +106,15 @@ def main(argv: Sequence[str] | None = None) -> None:
     if validation_tokens.numel() <= model_config.context_length:
         parser.error(
             "Validation documents must produce more tokens than --context-length."
+        )
+    if train_target_mask is not None and not train_target_mask[1:].any():
+        parser.error("Training conversations contain no supervised assistant tokens.")
+    if (
+        validation_target_mask is not None
+        and not validation_target_mask[1:].any()
+    ):
+        parser.error(
+            "Validation conversations contain no supervised assistant tokens."
         )
 
     model = BitGenesisLM(model_config)
@@ -120,6 +133,8 @@ def main(argv: Sequence[str] | None = None) -> None:
         eval_batches=args.eval_batches,
         seed=args.seed,
         device="cpu",
+        train_target_mask=train_target_mask,
+        validation_target_mask=validation_target_mask,
     )
 
     output_dir = Path(args.output_dir)

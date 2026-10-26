@@ -80,7 +80,10 @@ The validation documents are kept separate from tokenizer training. This step
 also includes an experimental, small decoder-only Transformer that can be
 trained locally from random initialization. See [install.md](install.md) for
 the optional PyTorch setup, structured conversation data format, and commands
-for training and response generation.
+for training and response generation. Conversational training calculates the
+loss only for assistant response tokens and response-end markers; user messages
+and role markers provide context without contributing to the loss. Plain-text
+training continues to use all next-token targets.
 
 ## Status
 

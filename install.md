@@ -105,7 +105,10 @@ the context length, model dimensions, batch size, and step count for your
 hardware and dataset. The training command prints periodic training and
 validation losses and a short generated reply. The tokenizer marks user and
 assistant roles and an end-of-response token; generation stops at that marker
-or when the token limit is reached.
+or when the token limit is reached. For conversational data, the loss is
+calculated only on assistant response tokens and end-of-response markers;
+user messages and role markers are context only. Plain-text training continues
+to calculate loss on every next-token target.
 
 Generate text from a saved checkpoint later:
 

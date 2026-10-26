@@ -23,16 +23,28 @@ def encode_documents(tokenizer: BPETokenizer, documents: Sequence[str]) -> Tenso
 def encode_conversations(
     tokenizer: BPETokenizer,
     conversations: Sequence[Conversation],
-) -> Tensor:
-    """Encode structured conversation turns and response-end markers."""
+) -> tuple[Tensor, Tensor]:
+    """Return conversation token IDs and a mask selecting assistant targets."""
     if not conversations:
         raise ValueError("At least one conversation is required")
+    encoded_conversations = [
+        tokenizer.encode_conversation_with_loss_mask(conversation)
+        for conversation in conversations
+    ]
     token_ids = [
         token_id
-        for conversation in conversations
-        for token_id in tokenizer.encode_conversation(conversation)
+        for encoded, _ in encoded_conversations
+        for token_id in encoded
     ]
-    return torch.tensor(token_ids, dtype=torch.long)
+    loss_mask = [
+        is_response_token
+        for _, mask in encoded_conversations
+        for is_response_token in mask
+    ]
+    return (
+        torch.tensor(token_ids, dtype=torch.long),
+        torch.tensor(loss_mask, dtype=torch.bool),
+    )
 
 
 def get_batch(
@@ -41,8 +53,9 @@ def get_batch(
     context_length: int,
     device: torch.device | str = "cpu",
     generator: torch.Generator | None = None,
+    target_mask: Tensor | None = None,
 ) -> tuple[Tensor, Tensor]:
-    """Sample input windows and their one-token-shifted next-token targets."""
+    """Sample windows, optionally ignoring targets outside a supervision mask."""
     if tokens.ndim != 1:
         raise ValueError("tokens must be a one-dimensional tensor")
     if (
@@ -60,14 +73,33 @@ def get_batch(
     if tokens.numel() <= context_length:
         raise ValueError("token sequence must contain more tokens than context_length")
 
-    starts = torch.randint(
-        tokens.numel() - context_length,
-        (batch_size,),
-        generator=generator,
-    )
+    if target_mask is None:
+        starts = torch.randint(
+            tokens.numel() - context_length,
+            (batch_size,),
+            generator=generator,
+        )
+    else:
+        if target_mask.shape != tokens.shape or target_mask.dtype != torch.bool:
+            raise ValueError("target_mask must be a boolean tensor with the same shape as tokens")
+        eligible_starts = torch.nonzero(
+            target_mask[1:].unfold(0, context_length, 1).any(dim=1),
+            as_tuple=False,
+        ).flatten()
+        if eligible_starts.numel() == 0:
+            raise ValueError("No training windows contain supervised response tokens")
+        choices = torch.randint(
+            eligible_starts.numel(),
+            (batch_size,),
+            generator=generator,
+        )
+        starts = eligible_starts[choices]
     offsets = torch.arange(context_length)
     input_ids = tokens[starts[:, None] + offsets]
     target_ids = tokens[starts[:, None] + offsets + 1]
+    if target_mask is not None:
+        supervised_targets = target_mask[starts[:, None] + offsets + 1]
+        target_ids = target_ids.masked_fill(~supervised_targets, -100)
     return input_ids.to(device), target_ids.to(device)
 
 
@@ -80,6 +112,8 @@ def estimate_loss(
     eval_batches: int,
     device: torch.device | str,
     generator: torch.Generator,
+    train_target_mask: Tensor | None = None,
+    validation_target_mask: Tensor | None = None,
 ) -> dict[str, float]:
     if (
         isinstance(eval_batches, bool)
@@ -93,9 +127,9 @@ def estimate_loss(
     results: dict[str, float] = {}
     try:
         with torch.no_grad():
-            for name, tokens in (
-                ("train", train_tokens),
-                ("validation", validation_tokens),
+            for name, tokens, target_mask in (
+                ("train", train_tokens, train_target_mask),
+                ("validation", validation_tokens, validation_target_mask),
             ):
                 losses = []
                 for _ in range(eval_batches):
@@ -105,6 +139,7 @@ def estimate_loss(
                         model.config.context_length,
                         device,
                         generator,
+                        target_mask,
                     )
                     _, loss = model(inputs, targets)
                     if loss is None:
@@ -130,6 +165,8 @@ def train_model(
     eval_batches: int = 10,
     seed: int = 42,
     device: torch.device | str = "cpu",
+    train_target_mask: Tensor | None = None,
+    validation_target_mask: Tensor | None = None,
 ) -> list[dict[str, float]]:
     """Train from random initialization and return periodic loss measurements."""
     for name, value in (
@@ -157,6 +194,7 @@ def train_model(
             model.config.context_length,
             device,
             generator,
+            train_target_mask,
         )
         _, loss = model(inputs, targets)
         if loss is None:
@@ -177,6 +215,8 @@ def train_model(
                 eval_batches=eval_batches,
                 device=device,
                 generator=generator,
+                train_target_mask=train_target_mask,
+                validation_target_mask=validation_target_mask,
             )
             record = {"step": float(step), **measured_losses}
             history.append(record)

@@ -50,6 +50,21 @@ class BitGenesisLMTests(unittest.TestCase):
         self.assertIsNotNone(loss)
         self.assertTrue(torch.isfinite(loss))
 
+    def test_forward_ignores_unsupervised_targets(self) -> None:
+        model = make_model()
+        token_ids = torch.randint(0, 256, (2, 8))
+        targets = torch.randint(0, 256, (2, 8))
+        targets[:, :4] = -100
+
+        logits, loss = model(token_ids, targets)
+
+        expected_loss = torch.nn.functional.cross_entropy(
+            logits[:, 4:, :].reshape(-1, 256),
+            targets[:, 4:].reshape(-1),
+        )
+        self.assertIsNotNone(loss)
+        self.assertTrue(torch.allclose(loss, expected_loss))
+
     def test_generation_respects_context_and_keeps_valid_token_ids(self) -> None:
         model = make_model()
         prompt = torch.tensor([[1, 2, 3, 4, 5, 6, 7, 8, 9]])
@@ -116,6 +131,33 @@ class TrainingTests(unittest.TestCase):
         self.assertEqual(inputs.shape, (4, 5))
         self.assertTrue(torch.equal(inputs[:, 1:], targets[:, :-1]))
 
+    def test_conversation_batches_mask_user_targets(self) -> None:
+        tokens = torch.arange(20)
+        target_mask = torch.zeros(20, dtype=torch.bool)
+        target_mask[[5, 6, 12, 13]] = True
+
+        inputs, targets = get_batch(
+            tokens,
+            batch_size=8,
+            context_length=4,
+            generator=torch.Generator().manual_seed(7),
+            target_mask=target_mask,
+        )
+
+        for row in targets:
+            valid_offsets = torch.nonzero(row != -100, as_tuple=False).flatten()
+            self.assertGreater(valid_offsets.numel(), 0)
+            self.assertTrue(torch.all(target_mask[row[valid_offsets]]))
+
+    def test_rejects_conversation_split_without_supervised_windows(self) -> None:
+        with self.assertRaisesRegex(ValueError, "No training windows"):
+            get_batch(
+                torch.arange(20),
+                batch_size=1,
+                context_length=4,
+                target_mask=torch.zeros(20, dtype=torch.bool),
+            )
+
     def test_trains_saves_loads_and_generates(self) -> None:
         tokenizer = BPETokenizer.train(
             ["ciao bitgenesis", "salve bitgenesis"], vocab_size=256
@@ -124,8 +166,10 @@ class TrainingTests(unittest.TestCase):
             turns=(("ciao bitgenesis", "salve bitgenesis"),)
         )
         validation_conversation = Conversation(turns=(("come stai", "sto bene"),))
-        train_tokens = encode_conversations(tokenizer, [train_conversation] * 4)
-        validation_tokens = encode_conversations(
+        train_tokens, train_target_mask = encode_conversations(
+            tokenizer, [train_conversation] * 4
+        )
+        validation_tokens, validation_target_mask = encode_conversations(
             tokenizer, [validation_conversation] * 4
         )
         model = make_model(tokenizer.vocab_size)
@@ -139,6 +183,8 @@ class TrainingTests(unittest.TestCase):
             eval_interval=1,
             eval_batches=1,
             seed=7,
+            train_target_mask=train_target_mask,
+            validation_target_mask=validation_target_mask,
         )
         model.training_format = "conversations"
 
