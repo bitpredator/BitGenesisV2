@@ -22,9 +22,11 @@ class LoadEvaluationCasesTests(unittest.TestCase):
 
         cases = load_evaluation_cases(path)
 
-        self.assertEqual(len(cases), 6)
+        self.assertEqual(len(cases), 8)
         self.assertEqual(len({case.id for case in cases}), len(cases))
         self.assertTrue(all(case.criteria for case in cases))
+        self.assertIn("license", {case.id for case in cases})
+        self.assertIn("italian-origin", {case.id for case in cases})
 
     def test_rejects_duplicate_ids_and_malformed_json(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
