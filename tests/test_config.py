@@ -23,8 +23,9 @@ class LoadConfigTests(unittest.TestCase):
 
             config = load_config(config_path)
 
-            self.assertEqual(config.datasets_dir, Path(temp_dir) / "corpus")
-            self.assertEqual(config.models_dir, Path(temp_dir) / "weights")
+            base_dir = config_path.resolve().parent
+            self.assertEqual(config.datasets_dir, base_dir / "corpus")
+            self.assertEqual(config.models_dir, base_dir / "weights")
 
     def test_rejects_empty_language(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
