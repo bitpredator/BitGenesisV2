@@ -118,3 +118,28 @@ python -m bitgenesis.generate --prompt "Ciao, come stai?"
 
 The generated output is an experiment, not evidence that the model understands
 Italian or can reliably answer questions.
+
+## Evaluate a conversation model
+
+The fixed Italian evaluation prompts and manual review criteria are in
+`data\evaluation\prompts.jsonl`. This file is separate from the training
+directory and is not loaded by the training command. The prompts use different
+wording from the synthetic training examples to check whether the model can
+respond to the same facts without simply repeating a training question.
+
+After training a conversation model, run the evaluation with a fixed seed:
+
+```powershell
+python -m bitgenesis.evaluate --seed 42 --output data\models\evaluation.jsonl
+```
+
+The report records each prompt, response, review criteria, generation settings,
+checkpoint path, and checks for empty replies or internal conversation
+markers. In each report row, fill in `passed` as `true` or `false` for every
+criterion after reviewing the response. Passing the automatic checks alone
+does not mean its factual answer is correct. Keep reports out of the training
+directory.
+
+To compare two checkpoints, keep their model and tokenizer files in separate
+directories and run the same cases, seed, temperature, and token limit for
+each. Give each run a different `--output` path and compare the saved reports.
