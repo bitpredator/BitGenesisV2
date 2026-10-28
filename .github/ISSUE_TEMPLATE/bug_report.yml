@@ -1,0 +1,59 @@
+name: Bug report
+description: Report incorrect behavior or a reproducible problem.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before submitting, check whether this issue has already been reported.
+        Do not include passwords, tokens, personal information, or private datasets.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Problem description
+      description: Clearly explain what is not working.
+      placeholder: Describe the problem...
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: List the steps and commands needed to reproduce the problem.
+      placeholder: |
+        1. Run...
+        2. Enter...
+        3. Observe...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What did you expect to happen?
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What happened? If useful, include an error message with sensitive information removed.
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Include your operating system, Python version, and command.
+      placeholder: "Windows 11, Python 3.12, python -m bitgenesis..."
+    validations:
+      required: true
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional information
+      description: Add useful details, screenshots, or logs after removing private information.
+    validations:
+      required: false

@@ -95,3 +95,10 @@ capable or reliable conversational assistant.
 ## License
 
 BitGenesis is licensed under the MIT License. See [LICENSE](LICENSE) for details.
+
+## Contributing
+
+Bug reports, feature requests, and contribution proposals can be submitted
+through the [GitHub issue templates](.github/ISSUE_TEMPLATE). See
+[CONTRIBUTING.md](.github/CONTRIBUTING.md) for development and pull request
+guidelines.

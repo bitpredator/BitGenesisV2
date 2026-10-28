@@ -1,0 +1,44 @@
+name: Contribution proposal
+description: Propose a contribution you would like to make to BitGenesis.
+title: "[Contribution]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form to discuss a contribution before getting started or to
+        let us know which area of the project you would like to work on.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Contribution area
+      options:
+        - Bug fix
+        - Code or tests
+        - Documentation
+        - Corpus or evaluation
+        - Interface or usability
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would you like to do?
+      description: Describe the contribution and the outcome you would like to achieve.
+    validations:
+      required: true
+  - type: textarea
+    id: plan
+    attributes:
+      label: Approach or plan
+      description: If known, describe how you plan to proceed and which files or areas may be involved.
+    validations:
+      required: false
+  - type: input
+    id: related
+    attributes:
+      label: Related issue or discussion
+      description: Add a reference if one exists.
+      placeholder: "#123"
+    validations:
+      required: false
