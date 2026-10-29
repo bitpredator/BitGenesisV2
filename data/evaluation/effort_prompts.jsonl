@@ -1,0 +1,4 @@
+{"id":"greeting","prompt":"Ciao!","criteria":["Risponde al saluto in modo breve e pertinente."]}
+{"id":"simple-question","prompt":"Che cos'è BitGenesis?","criteria":["Risponde in modo conciso e pertinente alla domanda."]}
+{"id":"explanation","prompt":"Spiegami in breve cos'è BitGenesis.","criteria":["Spiega BitGenesis in italiano in modo comprensibile e senza divagare."]}
+{"id":"multi-step","prompt":"Confronta i vantaggi e i limiti di un modello locale rispetto a un servizio online, poi proponi due passi concreti per migliorare BitGenesis.","criteria":["Confronta vantaggi e limiti di entrambi gli approcci.","Propone due passi concreti e pertinenti."]}

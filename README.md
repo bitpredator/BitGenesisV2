@@ -56,6 +56,34 @@ you confirm. Choose generation effort with `/impegno auto|minimo|medio|alto`;
 the `--effort` option sets the starting level. Without a trained conversation
 model, the interface explains how to train one.
 
+To compare the effort levels on a small, fixed prompt set, train a conversation
+model and run:
+
+```console
+python -m bitgenesis.evaluate --compare-effort --max-new-tokens 80
+```
+
+The benchmark currently covers these requests and Auto's expected selection:
+
+| Case | Prompt | Auto level |
+|---|---|---|
+| Greeting | `Ciao!` | Minimum |
+| Simple question | `Che cos'è BitGenesis?` | Medium |
+| Explanation | `Spiegami in breve cos'è BitGenesis.` | High |
+| Multi-step request | Compare local and online models, then suggest two improvements for BitGenesis. | High |
+
+These expected levels test the current rule-based classifier; they are not
+measured model-quality scores. The automated tests verify level selection,
+token budgets, and report fields:
+
+```console
+python -m unittest discover -s tests -p "test_evaluate.py" -v
+```
+
+The JSONL report records each response, selected level, generated token count,
+and generation time. Review response quality manually using the criteria in
+the report; timing and length alone do not measure correctness.
+
 ## Local text data and tokenizer
 
 Place UTF-8 `.txt` files in `data/datasets/` (subdirectories are read too). Each

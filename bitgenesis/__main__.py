@@ -4,10 +4,15 @@ from collections.abc import Callable, Sequence
 import argparse
 import math
 from pathlib import Path
-import re
-from typing import Literal, TypeGuard
 
 from bitgenesis.config import load_config
+from bitgenesis.effort import (
+    EFFORT_LEVELS,
+    EffortLevel,
+    choose_effort,
+    effort_token_budget,
+    is_effort_level,
+)
 from bitgenesis.generate import (
     CompactionError,
     ContextLengthError,
@@ -16,58 +21,6 @@ from bitgenesis.generate import (
 
 _EXIT_COMMANDS = {"esci", "exit", "quit", "uscita"}
 _BANNER_WIDTH = 52
-EffortLevel = Literal["auto", "minimo", "medio", "alto"]
-GenerationEffort = Literal["minimo", "medio", "alto"]
-_EFFORT_LEVELS: tuple[EffortLevel, ...] = ("auto", "minimo", "medio", "alto")
-_HIGH_EFFORT_CUES = {
-    "analizza",
-    "confronta",
-    "crea",
-    "debug",
-    "differenze",
-    "implementa",
-    "piano",
-    "perche",
-    "perché",
-    "progetta",
-    "proponi",
-    "riassumi",
-    "scrivi",
-    "spiega",
-    "spiegami",
-    "sintetizza",
-    "valuta",
-}
-
-
-def _is_effort_level(value: str) -> TypeGuard[EffortLevel]:
-    return value in _EFFORT_LEVELS
-
-
-def _choose_effort(
-    prompt: str,
-    requested_effort: EffortLevel,
-) -> GenerationEffort:
-    if requested_effort != "auto":
-        return requested_effort
-    words = re.findall(r"\w+", prompt.casefold())
-    if len(words) > 14 or _HIGH_EFFORT_CUES.intersection(words):
-        return "alto"
-    if len(words) > 5 or "?" in prompt:
-        return "medio"
-    return "minimo"
-
-
-def _effort_token_budget(base_tokens: int, effort: GenerationEffort) -> int:
-    if base_tokens == 0:
-        return 0
-    if effort == "minimo":
-        return max(1, base_tokens // 4)
-    if effort == "medio":
-        return base_tokens
-    if effort == "alto":
-        return base_tokens * 2
-    raise ValueError(f"Livello di impegno non valido: {effort}")
 
 
 def _write_welcome(
@@ -141,7 +94,7 @@ def run_chat(
                     f"  BitGenesis > Impegno attuale: {current_effort}. "
                     "Usa /impegno auto|minimo|medio|alto per cambiarlo."
                 )
-            elif len(command) == 2 and _is_effort_level(command[1]):
+            elif len(command) == 2 and is_effort_level(command[1]):
                 current_effort = command[1]
                 write_output(f"  BitGenesis > Impegno impostato: {current_effort}.")
             else:
@@ -219,8 +172,8 @@ def run_chat(
                 continue
             if chat is None:
                 chat = ConversationChat(model_path, tokenizer_path)
-            selected_effort = _choose_effort(message.strip(), current_effort)
-            token_budget = _effort_token_budget(max_new_tokens, selected_effort)
+            selected_effort = choose_effort(message.strip(), current_effort)
+            token_budget = effort_token_budget(max_new_tokens, selected_effort)
             effort_label = (
                 f"{selected_effort} (automatico)"
                 if current_effort == "auto"
@@ -256,7 +209,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     )
     parser.add_argument(
         "--effort",
-        choices=_EFFORT_LEVELS,
+        choices=EFFORT_LEVELS,
         default="auto",
         help="Livello di impegno iniziale della chat (default: auto).",
     )

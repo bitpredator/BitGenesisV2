@@ -102,6 +102,19 @@ configured value, and high uses twice that value. These levels change only the
 maximum response length; they do not add reasoning capabilities or guarantee
 more accurate answers.
 
+After training a conversation model, compare the four levels against a small
+fixed prompt set with:
+
+```powershell
+python -m bitgenesis.evaluate --compare-effort --max-new-tokens 80
+```
+
+The command saves `data/models/effort_benchmark_results.jsonl`. It records the
+response, selected level, tokenizer count of response tokens, and generation
+time for each prompt and mode. Compare response quality manually against the
+criteria recorded in the report; performance measurements do not establish
+factual correctness.
+
 ## Verify the installation
 
 Run the test suite from the repository root:
