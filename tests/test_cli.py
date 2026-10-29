@@ -6,21 +6,40 @@ from bitgenesis.__main__ import main, run_chat
 
 
 class RunChatTests(unittest.TestCase):
+    def test_welcome_banner_reports_missing_model(self) -> None:
+        output: list[str] = []
+
+        run_chat(
+            input_fn=lambda _prompt: "esci",
+            output_fn=output.append,
+            model_path=Path("missing/model.pt"),
+            tokenizer_path=Path("missing/tokenizer.json"),
+        )
+
+        self.assertIn("BITGENESIS", "\n".join(output))
+        self.assertIn(
+            f"  |{'File modello: non trovati'.center(52)}|",
+            output,
+        )
+        self.assertIn(
+            f"  |{'Risposte sperimentali: possono essere imprecise.'.center(52)}|",
+            output,
+        )
+        self.assertEqual(output[-1], "  BitGenesis > A presto!")
+
     def test_reports_missing_model_and_exits_in_italian(self) -> None:
         messages = iter(["Ciao BitGenesis", " esci "])
         output: list[str] = []
 
         run_chat(input_fn=lambda _prompt: next(messages), output_fn=output.append)
 
-        self.assertEqual(
+        self.assertIn("File modello: non trovati", "\n".join(output))
+        self.assertIn(
+            "  BitGenesis > Modello non disponibile. Addestrami prima con "
+            "'python -m bitgenesis.train --data-format conversations'.",
             output,
-            [
-                "BitGenesis: Ciao! Scrivimi in italiano. Digita 'esci' per terminare.",
-                "BitGenesis: Modello non disponibile. Addestrami prima con "
-                "'python -m bitgenesis.train --data-format conversations'.",
-                "BitGenesis: A presto!",
-            ],
         )
+        self.assertEqual(output[-1], "  BitGenesis > A presto!")
 
     def test_generates_replies_using_local_model_paths(self) -> None:
         messages = iter([" Ciao! ", "esci"])
@@ -46,6 +65,7 @@ class RunChatTests(unittest.TestCase):
                 max_new_tokens=12,
                 temperature=0.7,
             )
+            self.assertIn("File modello: presenti", "\n".join(output))
             chat_class.assert_called_once_with(model_path, tokenizer_path)
             chat.reply.assert_called_once()
             self.assertEqual(chat.reply.call_args.args[0], "Ciao!")
@@ -54,7 +74,7 @@ class RunChatTests(unittest.TestCase):
                 {"max_new_tokens": 12, "temperature": 0.7},
             )
         self.assertEqual(history_snapshots, [[]])
-        self.assertIn("BitGenesis: Salve!", output)
+        self.assertIn("  BitGenesis > Salve!", output)
 
     def test_passes_previous_turns_as_context_for_next_reply(self) -> None:
         messages = iter(["Ciao", "Come ti chiami?", "esci"])
@@ -86,7 +106,7 @@ class RunChatTests(unittest.TestCase):
         chat_class.assert_called_once_with(Path("model.pt"), Path("tokenizer.json"))
         self.assertEqual(chat.reply.call_count, 2)
         self.assertEqual(history_snapshots, [[], [("Ciao", "Salve!")]])
-        self.assertIn("BitGenesis: Sono BitGenesis.", output)
+        self.assertIn("  BitGenesis > Sono BitGenesis.", output)
 
     def test_reports_missing_checkpoint_files_without_attempting_generation(
         self,
@@ -104,7 +124,7 @@ class RunChatTests(unittest.TestCase):
 
         chat_class.assert_not_called()
         self.assertIn(
-            "BitGenesis: Modello non disponibile. Addestrami prima con "
+            "  BitGenesis > Modello non disponibile. Addestrami prima con "
             "'python -m bitgenesis.train --data-format conversations'.",
             output,
         )
@@ -117,8 +137,7 @@ class RunChatTests(unittest.TestCase):
 
         run_chat(input_fn=lambda _prompt: next(messages), output_fn=output.append)
 
-        self.assertEqual(len(output), 2)
-        self.assertEqual(output[-1], "BitGenesis: A presto!")
+        self.assertEqual(output[-1], "  BitGenesis > A presto!")
 
     def test_end_of_input_exits_cleanly(self) -> None:
         output: list[str] = []
@@ -128,7 +147,7 @@ class RunChatTests(unittest.TestCase):
 
         run_chat(input_fn=end_input, output_fn=output.append)
 
-        self.assertEqual(output[-1], "BitGenesis: A presto!")
+        self.assertEqual(output[-1], "  BitGenesis > A presto!")
 
     def test_main_loads_configuration_before_starting_chat(self) -> None:
         with (

@@ -54,7 +54,9 @@ Start the terminal interface:
 python -m bitgenesis
 ```
 
-Type `esci` to exit. After training a conversation model as described below,
+The terminal shows an ASCII welcome banner with the model-file status and
+reminds you that responses are experimental. Type `esci` to exit. After
+training a conversation model as described below,
 `python -m bitgenesis` loads the local checkpoint and tokenizer and generates
 responses during the session. It reports a clear message if either artifact is
 missing. Previous user/assistant turns are included in subsequent prompts
