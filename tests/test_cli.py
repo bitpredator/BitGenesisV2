@@ -77,6 +77,10 @@ class RunChatTests(unittest.TestCase):
                 temperature=0.7,
             )
             self.assertIn("File modello: presenti", "\n".join(output))
+            self.assertIn(
+                f"  |{'In locale ti chiamerò Utente.'.center(52)}|",
+                output,
+            )
             chat_class.assert_called_once_with(model_path, tokenizer_path)
             chat.reply.assert_called_once()
             self.assertEqual(chat.reply.call_args.args[0], "Ciao!")
@@ -84,7 +88,15 @@ class RunChatTests(unittest.TestCase):
                 {key: value for key, value in chat.reply.call_args.kwargs.items()},
                 {"max_new_tokens": 3, "temperature": 0.7},
             )
-        self.assertEqual(history_snapshots, [[]])
+        self.assertEqual(
+            history_snapshots,
+            [[
+                (
+                    "Regola per questa chat locale: chiama l'utente Utente.",
+                    "In questa chat locale chiamerò l'utente Utente.",
+                )
+            ]],
+        )
         self.assertIn("  BitGenesis > Salve!", output)
 
     def test_passes_previous_turns_as_context_for_next_reply(self) -> None:
@@ -116,7 +128,14 @@ class RunChatTests(unittest.TestCase):
 
         chat_class.assert_called_once_with(Path("model.pt"), Path("tokenizer.json"))
         self.assertEqual(chat.reply.call_count, 2)
-        self.assertEqual(history_snapshots, [[], [("Ciao", "Salve!")]])
+        local_identity = (
+            "Regola per questa chat locale: chiama l'utente Utente.",
+            "In questa chat locale chiamerò l'utente Utente.",
+        )
+        self.assertEqual(
+            history_snapshots,
+            [[local_identity], [("Ciao", "Salve!"), local_identity]],
+        )
         self.assertIn("  BitGenesis > Sono BitGenesis.", output)
 
     def test_auto_effort_scales_generation_for_request_complexity(self) -> None:
@@ -175,6 +194,49 @@ class RunChatTests(unittest.TestCase):
             output,
         )
 
+    def test_local_user_name_is_fixed_in_context(self) -> None:
+        messages = iter(["Ciao", "Come mi chiamo?", "esci"])
+        output: list[str] = []
+        history_snapshots: list[list[tuple[str, str]]] = []
+
+        with (
+            patch.object(Path, "is_file", return_value=True),
+            patch("bitgenesis.__main__.ConversationChat") as chat_class,
+        ):
+            chat = chat_class.return_value
+
+            def reply_with_history(
+                _prompt: str,
+                history: list[tuple[str, str]],
+                **_kwargs: object,
+            ) -> str:
+                history_snapshots.append(list(history))
+                return "Ciao, Utente!"
+
+            chat.reply.side_effect = reply_with_history
+            run_chat(
+                input_fn=lambda _prompt: next(messages),
+                output_fn=output.append,
+                model_path=Path("model.pt"),
+                tokenizer_path=Path("tokenizer.json"),
+            )
+
+        local_identity = (
+            "Regola per questa chat locale: chiama l'utente Utente.",
+            "In questa chat locale chiamerò l'utente Utente.",
+        )
+        self.assertEqual(
+            history_snapshots[0],
+            [local_identity],
+        )
+        self.assertEqual(
+            history_snapshots[1],
+            [
+                ("Ciao", "Ciao, Utente!"),
+                local_identity,
+            ],
+        )
+
     def test_compact_previews_summary_and_applies_it_after_confirmation(self) -> None:
         messages = iter(["Ciao", "Come stai?", "/compact", "s", "E poi?", "esci"])
         output: list[str] = []
@@ -222,6 +284,10 @@ class RunChatTests(unittest.TestCase):
             [
                 ("Riassunto della conversazione precedente", "L'utente ha salutato."),
                 ("Come stai?", "Sto bene"),
+                (
+                    "Regola per questa chat locale: chiama l'utente Utente.",
+                    "In questa chat locale chiamerò l'utente Utente.",
+                ),
             ],
         )
         self.assertTrue(
@@ -264,7 +330,14 @@ class RunChatTests(unittest.TestCase):
 
         self.assertEqual(
             history_snapshots[-1],
-            [("Ciao", "Salve"), ("Come stai?", "Sto bene")],
+            [
+                ("Ciao", "Salve"),
+                ("Come stai?", "Sto bene"),
+                (
+                    "Regola per questa chat locale: chiama l'utente Utente.",
+                    "In questa chat locale chiamerò l'utente Utente.",
+                ),
+            ],
         )
         self.assertIn(
             "  BitGenesis > Compattazione annullata; cronologia invariata.",

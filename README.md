@@ -56,6 +56,11 @@ you confirm. Choose generation effort with `/impegno auto|minimo|medio|alto`;
 the `--effort` option sets the starting level. Without a trained conversation
 model, the interface explains how to train one.
 
+In local mode BitGenesis always addresses the person using it as `Utente`;
+there is no local nickname setting. Choosing a personal nickname is reserved
+for a future official server, where it can be associated with a verified
+account.
+
 To compare the effort levels on a small, fixed prompt set, train a conversation
 model and run:
 

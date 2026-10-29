@@ -21,6 +21,7 @@ from bitgenesis.generate import (
 
 _EXIT_COMMANDS = {"esci", "exit", "quit", "uscita"}
 _BANNER_WIDTH = 52
+_LOCAL_USER_NAME = "Utente"
 
 
 def _write_welcome(
@@ -49,6 +50,9 @@ def _write_welcome(
     )
     effort_hint = "/impegno auto|minimo|medio|alto cambia il livello."
     write_output(f"  |{effort_hint.center(_BANNER_WIDTH)}|")
+    if model_files_found:
+        name_hint = "In locale ti chiamerò Utente."
+        write_output(f"  |{name_hint.center(_BANNER_WIDTH)}|")
     write_output(f"  |{'Digita esci per terminare.'.center(_BANNER_WIDTH)}|")
     write_output(border)
     write_output("")
@@ -180,10 +184,18 @@ def run_chat(
                 else selected_effort
             )
             write_output(f"  BitGenesis > Impegno: {effort_label}.")
+            chat_history = [
+                *history,
+                (
+                    f"Regola per questa chat locale: chiama l'utente "
+                    f"{_LOCAL_USER_NAME}.",
+                    f"In questa chat locale chiamerò l'utente {_LOCAL_USER_NAME}.",
+                ),
+            ]
             try:
                 response = chat.reply(
                     message.strip(),
-                    history,
+                    chat_history,
                     max_new_tokens=token_budget,
                     temperature=temperature,
                 )

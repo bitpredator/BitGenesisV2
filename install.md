@@ -143,6 +143,11 @@ confirm; declining leaves it unchanged. Summaries are experimental and may
 omit details, so review them before accepting. Conversation history is not
 saved after exit.
 
+In local mode, BitGenesis always addresses the person using it as `Utente`;
+nicknames cannot be selected or reserved locally. Personal nicknames may be
+added in a future official-server version and associated with verified
+accounts.
+
 ## Add local training data
 
 Training data stays in `data\datasets\`, which is excluded from Git. Only use
