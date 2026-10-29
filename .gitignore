@@ -24,7 +24,8 @@ credentials*.json
 *.key
 
 # Local datasets and trained model files
-data/datasets/
+data/datasets/*
+!data/datasets/esempi_sintetici.jsonl
 data/models/
 
 # Build output and logs
