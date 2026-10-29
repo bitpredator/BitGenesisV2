@@ -9,7 +9,14 @@ import sys
 import torch
 
 from bitgenesis.config import load_config
-from bitgenesis.corpus import load_conversations, load_corpus, split_corpus
+from bitgenesis.corpus import (
+    CorpusRecord,
+    Conversation,
+    find_duplicate_groups,
+    load_conversation_records,
+    load_corpus_records,
+    split_corpus,
+)
 from bitgenesis.generate import generate_from_model, generate_text_from_model
 from bitgenesis.model import BitGenesisLM, ModelConfig, model_config_to_dict
 from bitgenesis.tokenizer import BPETokenizer
@@ -20,6 +27,29 @@ from bitgenesis.training import (
     save_training_report,
     train_model,
 )
+
+
+def _report_duplicate_groups(
+    records: Sequence[CorpusRecord[str] | CorpusRecord[Conversation]],
+) -> None:
+    duplicate_groups = find_duplicate_groups(records)
+    if not duplicate_groups:
+        return
+
+    duplicate_copies = sum(len(group) - 1 for group in duplicate_groups)
+    group_label = "gruppo" if len(duplicate_groups) == 1 else "gruppi"
+    print(
+        f"Attenzione: trovati {len(duplicate_groups)} {group_label} "
+        "di duplicati esatti "
+        f"({duplicate_copies} copie aggiuntive). Le copie restano nel corpus e "
+        "saranno assegnate allo stesso split:",
+        file=sys.stderr,
+    )
+    for group in duplicate_groups:
+        locations = ", ".join(
+            f"{record.path}:{record.line_number}" for record in group
+        )
+        print(f"  - {locations}", file=sys.stderr)
 
 
 def main(argv: Sequence[str] | None = None) -> None:
@@ -104,34 +134,44 @@ def main(argv: Sequence[str] | None = None) -> None:
 
     torch.manual_seed(args.seed)
     if args.data_format == "text":
-        documents = load_corpus(args.data_dir)
+        records = load_corpus_records(args.data_dir)
+        _report_duplicate_groups(records)
         split = split_corpus(
-            documents,
+            records,
             validation_fraction=args.validation_fraction,
             seed=args.seed,
+            group_key=lambda record: record.content,
         )
-        tokenizer = BPETokenizer.train(split.train, vocab_size=args.vocab_size)
-        train_tokens = encode_documents(tokenizer, split.train)
-        validation_tokens = encode_documents(tokenizer, split.validation)
+        train_documents = [record.content for record in split.train]
+        validation_documents = [record.content for record in split.validation]
+        tokenizer = BPETokenizer.train(train_documents, vocab_size=args.vocab_size)
+        train_tokens = encode_documents(tokenizer, train_documents)
+        validation_tokens = encode_documents(tokenizer, validation_documents)
         train_target_mask = None
         validation_target_mask = None
     else:
-        conversations = load_conversations(args.data_dir)
+        records = load_conversation_records(args.data_dir)
+        _report_duplicate_groups(records)
         split = split_corpus(
-            conversations,
+            records,
             validation_fraction=args.validation_fraction,
             seed=args.seed,
+            group_key=lambda record: record.content,
         )
+        train_conversations = [record.content for record in split.train]
+        validation_conversations = [record.content for record in split.validation]
         training_text = [
             message
-            for conversation in split.train
+            for conversation in train_conversations
             for turn in conversation.turns
             for message in turn
         ]
         tokenizer = BPETokenizer.train(training_text, vocab_size=args.vocab_size)
-        train_tokens, train_target_mask = encode_conversations(tokenizer, split.train)
+        train_tokens, train_target_mask = encode_conversations(
+            tokenizer, train_conversations
+        )
         validation_tokens, validation_target_mask = encode_conversations(
-            tokenizer, split.validation
+            tokenizer, validation_conversations
         )
 
     model_config = ModelConfig(

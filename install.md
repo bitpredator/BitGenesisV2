@@ -113,14 +113,18 @@ the assistant. A line may contain multiple turns:
 ```
 
 Each JSONL line is one conversation, and files are loaded recursively in stable
-path order. The training pipeline splits whole conversations before learning
-the tokenizer, so validation conversations are not used to train it. At least
-two conversations are required for a non-empty validation split. Both splits
-must contain more tokens than the configured context length (128 by default).
+path order. Before training, exact duplicate conversations are reported with
+their file and line locations. Copies are retained, but all copies are assigned
+to the same training or validation split to avoid leakage. The training
+pipeline splits whole conversations before learning the tokenizer, so
+validation conversations are not used to train it. At least two distinct
+conversations are required for a non-empty validation split. Both splits must
+contain more tokens than the configured context length (128 by default).
 
 Plain UTF-8 `.txt` documents remain supported as an alternative. Select the
 input format explicitly using `--data-format text` or
-`--data-format conversations`.
+`--data-format conversations`. Exact duplicate text documents are reported and
+kept in the same split as one another.
 
 ## Train and generate text
 

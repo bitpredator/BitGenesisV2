@@ -1,3 +1,5 @@
+from contextlib import redirect_stderr
+import io
 import json
 import tempfile
 import unittest
@@ -73,6 +75,12 @@ class TrainCommandTests(unittest.TestCase):
                         {"role": "assistant", "content": "Sto bene"},
                     ]
                 },
+                {
+                    "messages": [
+                        {"role": "user", "content": "Ciao BitGenesis"},
+                        {"role": "assistant", "content": "Salve"},
+                    ]
+                },
             ]
             (data_dir / "examples.jsonl").write_text(
                 "".join(json.dumps(item) + "\n" for item in conversations),
@@ -89,9 +97,13 @@ class TrainCommandTests(unittest.TestCase):
             )
             output_dir = root / "models"
 
-            with patch(
-                "bitgenesis.train.load_config",
-                return_value=load_config(config_path),
+            warnings = io.StringIO()
+            with (
+                patch(
+                    "bitgenesis.train.load_config",
+                    return_value=load_config(config_path),
+                ),
+                redirect_stderr(warnings),
             ):
                 main(
                     [
@@ -132,8 +144,11 @@ class TrainCommandTests(unittest.TestCase):
                 report["configuration"]["data_format"], "conversations"
             )
             self.assertEqual(report["configuration"]["seed"], 42)
-            self.assertEqual(report["configuration"]["training_examples"], 1)
-            self.assertEqual(report["configuration"]["validation_examples"], 1)
+            example_counts = {
+                report["configuration"]["training_examples"],
+                report["configuration"]["validation_examples"],
+            }
+            self.assertEqual(example_counts, {1, 2})
             self.assertGreaterEqual(
                 report["configuration"]["model"]["vocab_size"], 256
             )
@@ -153,6 +168,10 @@ class TrainCommandTests(unittest.TestCase):
             self.assertEqual(report["history"][0]["step"], 1.0)
             self.assertTrue((output_dir / "bitgenesis.pt").is_file())
             self.assertTrue((output_dir / "tokenizer.json").is_file())
+            warning = warnings.getvalue()
+            self.assertIn("1 gruppo di duplicati esatti", warning)
+            self.assertIn("examples.jsonl:1", warning)
+            self.assertIn("examples.jsonl:3", warning)
 
 
 if __name__ == "__main__":

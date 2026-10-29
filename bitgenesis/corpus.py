@@ -1,5 +1,6 @@
 """Load and split local text documents for model training."""
 
+from collections.abc import Callable, Hashable, Sequence
 from dataclasses import dataclass
 import json
 from pathlib import Path
@@ -7,6 +8,13 @@ import random
 from typing import Generic, TypeVar
 
 T = TypeVar("T")
+
+
+@dataclass(frozen=True)
+class CorpusRecord(Generic[T]):
+    content: T
+    path: Path
+    line_number: int
 
 
 @dataclass(frozen=True)
@@ -20,8 +28,8 @@ class Conversation:
     turns: tuple[tuple[str, str], ...]
 
 
-def load_corpus(directory: Path) -> list[str]:
-    """Read UTF-8 .txt documents recursively in a stable order."""
+def load_corpus_records(directory: Path) -> list[CorpusRecord[str]]:
+    """Read UTF-8 text documents and retain their source paths."""
     directory = Path(directory)
     if not directory.exists():
         raise FileNotFoundError(f"Corpus directory does not exist: {directory}")
@@ -36,17 +44,25 @@ def load_corpus(directory: Path) -> list[str]:
         ),
         key=lambda path: path.as_posix(),
     )
-    documents = [path.read_text(encoding="utf-8") for path in files]
-    documents = [document for document in documents if document]
-    if not documents:
+    records = [
+        CorpusRecord(content=path.read_text(encoding="utf-8"), path=path, line_number=1)
+        for path in files
+    ]
+    records = [record for record in records if record.content]
+    if not records:
         raise ValueError(
             f"No non-empty .txt documents found in corpus directory: {directory}"
         )
-    return documents
+    return records
 
 
-def load_conversations(directory: Path) -> list[Conversation]:
-    """Load JSONL conversations with alternating user/assistant messages."""
+def load_corpus(directory: Path) -> list[str]:
+    """Read UTF-8 .txt documents recursively in a stable order."""
+    return [record.content for record in load_corpus_records(directory)]
+
+
+def load_conversation_records(directory: Path) -> list[CorpusRecord[Conversation]]:
+    """Load JSONL conversations and retain their source paths and line numbers."""
     directory = Path(directory)
     if not directory.exists():
         raise FileNotFoundError(f"Conversation directory does not exist: {directory}")
@@ -61,7 +77,7 @@ def load_conversations(directory: Path) -> list[Conversation]:
         ),
         key=lambda path: path.as_posix(),
     )
-    conversations: list[Conversation] = []
+    records: list[CorpusRecord[Conversation]] = []
     for path in files:
         with path.open(encoding="utf-8") as file:
             for line_number, line in enumerate(file, start=1):
@@ -73,13 +89,37 @@ def load_conversations(directory: Path) -> list[Conversation]:
                     raise ValueError(
                         f"Invalid JSON in {path} at line {line_number}: {error.msg}"
                     ) from error
-                conversations.append(_parse_conversation(record, path, line_number))
+                records.append(
+                    CorpusRecord(
+                        content=_parse_conversation(record, path, line_number),
+                        path=path,
+                        line_number=line_number,
+                    )
+                )
 
-    if not conversations:
+    if not records:
         raise ValueError(
             f"No non-empty conversations found in JSONL files in: {directory}"
         )
-    return conversations
+    return records
+
+
+def load_conversations(directory: Path) -> list[Conversation]:
+    """Load JSONL conversations with alternating user/assistant messages."""
+    return [record.content for record in load_conversation_records(directory)]
+
+
+def find_duplicate_groups(
+    records: Sequence[CorpusRecord[T]],
+) -> list[tuple[CorpusRecord[T], ...]]:
+    """Return exact duplicate records, preserving each source location."""
+    grouped: dict[Hashable, list[CorpusRecord[T]]] = {}
+    for record in records:
+        try:
+            grouped.setdefault(record.content, []).append(record)
+        except TypeError as error:
+            raise TypeError("Corpus record content must be hashable") from error
+    return [tuple(group) for group in grouped.values() if len(group) > 1]
 
 
 def _parse_conversation(record: object, path: Path, line_number: int) -> Conversation:
@@ -122,8 +162,10 @@ def split_corpus(
     documents: list[T] | tuple[T, ...],
     validation_fraction: float = 0.1,
     seed: int = 42,
+    *,
+    group_key: Callable[[T], Hashable] | None = None,
 ) -> CorpusSplit[T]:
-    """Split whole documents reproducibly, keeping each document in one split."""
+    """Split reproducibly, optionally keeping equal-key records together."""
     if not 0 <= validation_fraction < 1:
         raise ValueError(
             "validation_fraction must be greater than or equal to 0 and less than 1"
@@ -132,16 +174,34 @@ def split_corpus(
         raise ValueError("At least one corpus document is required")
     if validation_fraction == 0:
         return CorpusSplit(train=tuple(documents), validation=())
-    if len(documents) < 2:
+    if group_key is None:
+        groups = [[document] for document in documents]
+    else:
+        grouped: dict[Hashable, list[T]] = {}
+        for document in documents:
+            grouped.setdefault(group_key(document), []).append(document)
+        groups = list(grouped.values())
+
+    if len(groups) < 2:
         raise ValueError("At least two documents are required for a validation split")
 
-    shuffled = list(documents)
+    shuffled = list(groups)
     random.Random(seed).shuffle(shuffled)
     validation_count = min(
         len(shuffled) - 1,
         max(1, round(len(shuffled) * validation_fraction)),
     )
+    validation = tuple(
+        document
+        for group in shuffled[:validation_count]
+        for document in group
+    )
+    train = tuple(
+        document
+        for group in shuffled[validation_count:]
+        for document in group
+    )
     return CorpusSplit(
-        train=tuple(shuffled[validation_count:]),
-        validation=tuple(shuffled[:validation_count]),
+        train=train,
+        validation=validation,
     )

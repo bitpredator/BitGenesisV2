@@ -2,7 +2,14 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from bitgenesis.corpus import load_conversations, load_corpus, split_corpus
+from bitgenesis.corpus import (
+    find_duplicate_groups,
+    load_conversation_records,
+    load_conversations,
+    load_corpus,
+    load_corpus_records,
+    split_corpus,
+)
 
 
 class LoadCorpusTests(unittest.TestCase):
@@ -17,6 +24,17 @@ class LoadCorpusTests(unittest.TestCase):
             (root / "empty.txt").write_text("", encoding="utf-8")
 
             self.assertEqual(load_corpus(root), ["È una prova.", "Ciao"])
+
+    def test_records_include_source_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "notes.txt"
+            path.write_text("Testo", encoding="utf-8")
+
+            records = load_corpus_records(Path(temp_dir))
+
+        self.assertEqual(records[0].content, "Testo")
+        self.assertEqual(records[0].path, path)
+        self.assertEqual(records[0].line_number, 1)
 
     def test_rejects_missing_directory_and_empty_corpus(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -46,6 +64,30 @@ class SplitCorpusTests(unittest.TestCase):
         self.assertEqual(len(first.validation), 2)
         self.assertEqual(set(first.train).union(first.validation), set(documents))
         self.assertFalse(set(first.train).intersection(first.validation))
+
+    def test_keeps_duplicate_records_in_the_same_split(self) -> None:
+        documents = [
+            ("duplicato", "file-a.jsonl", 1),
+            ("unico", "file-a.jsonl", 2),
+            ("duplicato", "file-b.jsonl", 7),
+            ("altro", "file-c.jsonl", 1),
+        ]
+
+        split = split_corpus(
+            documents,
+            validation_fraction=0.5,
+            seed=11,
+            group_key=lambda record: record[0],
+        )
+
+        train_content = {record[0] for record in split.train}
+        validation_content = {record[0] for record in split.validation}
+        self.assertFalse(train_content.intersection(validation_content))
+        self.assertEqual(
+            sum(record[0] == "duplicato" for record in split.train)
+            + sum(record[0] == "duplicato" for record in split.validation),
+            2,
+        )
 
     def test_zero_validation_fraction_keeps_every_document_for_training(self) -> None:
         split = split_corpus(["solo documento"], validation_fraction=0)
@@ -87,6 +129,31 @@ class LoadConversationsTests(unittest.TestCase):
             (("Come va?", "Bene."), ("Grazie", "Prego.")),
         )
         self.assertEqual(conversations[1].turns, (("Ciao", "Salve"),))
+
+    def test_duplicate_groups_retain_file_and_line_locations(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            first = root / "first.jsonl"
+            second = root / "second.jsonl"
+            duplicate = (
+                '{"messages":[{"role":"user","content":"Ciao"},'
+                '{"role":"assistant","content":"Salve"}]}\n'
+            )
+            first.write_text(duplicate + duplicate, encoding="utf-8")
+            second.write_text(
+                '{"messages":[{"role":"user","content":"Come va?"},'
+                '{"role":"assistant","content":"Bene."}]}\n',
+                encoding="utf-8",
+            )
+
+            records = load_conversation_records(root)
+            duplicate_groups = find_duplicate_groups(records)
+
+        self.assertEqual(len(duplicate_groups), 1)
+        self.assertEqual(
+            [(record.path, record.line_number) for record in duplicate_groups[0]],
+            [(first, 1), (first, 2)],
+        )
 
     def test_reports_invalid_json_and_invalid_message_roles(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
