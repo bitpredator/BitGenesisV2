@@ -2,6 +2,7 @@
 
 import argparse
 from collections.abc import Sequence
+import math
 from pathlib import Path
 import sys
 
@@ -41,12 +42,20 @@ def main(argv: Sequence[str] | None = None) -> None:
         default="text",
         help="Read UTF-8 .txt documents or structured .jsonl conversations.",
     )
-    parser.add_argument("--vocab-size", type=int, default=1000)
-    parser.add_argument("--context-length", type=int, default=128)
-    parser.add_argument("--embedding-dim", type=int, default=64)
-    parser.add_argument("--heads", type=int, default=4)
-    parser.add_argument("--layers", type=int, default=2)
-    parser.add_argument("--dropout", type=float, default=0.1)
+    parser.add_argument("--vocab-size", type=int, default=config.model.vocab_size)
+    parser.add_argument(
+        "--context-length",
+        type=int,
+        default=config.model.context_length,
+    )
+    parser.add_argument(
+        "--embedding-dim",
+        type=int,
+        default=config.model.embedding_dim,
+    )
+    parser.add_argument("--heads", type=int, default=config.model.heads)
+    parser.add_argument("--layers", type=int, default=config.model.layers)
+    parser.add_argument("--dropout", type=float, default=config.model.dropout)
     parser.add_argument("--steps", type=int, default=1000)
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--learning-rate", type=float, default=3e-4)
@@ -55,11 +64,22 @@ def main(argv: Sequence[str] | None = None) -> None:
     parser.add_argument("--validation-fraction", type=float, default=0.1)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--prompt", default="Ciao")
-    parser.add_argument("--generate-tokens", type=int, default=80)
+    parser.add_argument(
+        "--generate-tokens",
+        type=int,
+        default=config.generation.max_new_tokens,
+    )
+    parser.add_argument(
+        "--temperature",
+        type=float,
+        default=config.generation.temperature,
+    )
     args = parser.parse_args(argv)
 
     if args.generate_tokens < 0:
         parser.error("--generate-tokens must not be negative")
+    if not math.isfinite(args.temperature) or args.temperature <= 0:
+        parser.error("--temperature must be a finite number greater than zero")
     if not 0 < args.validation_fraction < 1:
         parser.error(
             "--validation-fraction must be greater than 0 and less than 1 for training."
@@ -179,6 +199,8 @@ def main(argv: Sequence[str] | None = None) -> None:
             "eval_batches": args.eval_batches,
             "validation_fraction": args.validation_fraction,
             "seed": args.seed,
+            "generate_tokens": args.generate_tokens,
+            "temperature": args.temperature,
         },
         history=history,
     )
@@ -199,6 +221,7 @@ def main(argv: Sequence[str] | None = None) -> None:
                 tokenizer,
                 args.prompt,
                 max_new_tokens=args.generate_tokens,
+                temperature=args.temperature,
             )
             print(f"\nRisposta generata:\n{generated_text}")
         else:
@@ -207,6 +230,7 @@ def main(argv: Sequence[str] | None = None) -> None:
                 tokenizer,
                 args.prompt,
                 max_new_tokens=args.generate_tokens,
+                temperature=args.temperature,
             )
             print(f"\nTesto generato:\n{generated_text}")
 

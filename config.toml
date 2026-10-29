@@ -4,3 +4,19 @@ language = "it"
 [paths]
 datasets = "data/datasets"
 models = "data/models"
+
+[generation]
+max_new_tokens = 80
+temperature = 1.0
+
+[evaluation]
+max_new_tokens = 160
+temperature = 0.7
+
+[model]
+vocab_size = 1000
+context_length = 128
+embedding_dim = 64
+heads = 4
+layers = 2
+dropout = 0.1

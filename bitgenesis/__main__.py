@@ -1,6 +1,8 @@
 """Run BitGenesis in an interactive terminal session."""
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
+import argparse
+import math
 from pathlib import Path
 
 from bitgenesis.config import load_config
@@ -92,13 +94,32 @@ def run_chat(
             history.append((message.strip(), response))
 
 
-def main() -> None:
+def main(argv: Sequence[str] | None = None) -> None:
     config = load_config()
+    parser = argparse.ArgumentParser(description="Chat with BitGenesis in Italian.")
+    parser.add_argument(
+        "--max-new-tokens",
+        type=int,
+        default=config.generation.max_new_tokens,
+    )
+    parser.add_argument(
+        "--temperature",
+        type=float,
+        default=config.generation.temperature,
+    )
+    args = parser.parse_args(argv)
+    if args.max_new_tokens < 0:
+        parser.error("--max-new-tokens must not be negative")
+    if not math.isfinite(args.temperature) or args.temperature <= 0:
+        parser.error("--temperature must be a finite number greater than zero")
+
     model_path = config.models_dir / "bitgenesis.pt"
     tokenizer_path = config.models_dir / "tokenizer.json"
     run_chat(
         model_path=model_path,
         tokenizer_path=tokenizer_path,
+        max_new_tokens=args.max_new_tokens,
+        temperature=args.temperature,
     )
 
 

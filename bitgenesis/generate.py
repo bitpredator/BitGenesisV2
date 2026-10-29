@@ -188,8 +188,16 @@ def main(argv: Sequence[str] | None = None) -> None:
         "--tokenizer", default=str(config.models_dir / "tokenizer.json")
     )
     parser.add_argument("--prompt", required=True)
-    parser.add_argument("--max-new-tokens", type=int, default=80)
-    parser.add_argument("--temperature", type=float, default=1.0)
+    parser.add_argument(
+        "--max-new-tokens",
+        type=int,
+        default=config.generation.max_new_tokens,
+    )
+    parser.add_argument(
+        "--temperature",
+        type=float,
+        default=config.generation.temperature,
+    )
     args = parser.parse_args(argv)
     if args.max_new_tokens < 0:
         parser.error("--max-new-tokens must not be negative")

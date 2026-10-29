@@ -2,7 +2,9 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
+from bitgenesis.config import load_config
 from bitgenesis.train import main
 
 
@@ -76,38 +78,51 @@ class TrainCommandTests(unittest.TestCase):
                 "".join(json.dumps(item) + "\n" for item in conversations),
                 encoding="utf-8",
             )
+            config_path = root / "config.toml"
+            config_path.write_text(
+                '[app]\nlanguage = "it"\n\n[paths]\ndatasets = "datasets"\n'
+                'models = "models"\n\n[generation]\nmax_new_tokens = 5\n'
+                'temperature = 0.5\n\n[model]\nvocab_size = 256\n'
+                'context_length = 2\nembedding_dim = 4\nheads = 1\n'
+                'layers = 1\ndropout = 0.0\n',
+                encoding="utf-8",
+            )
             output_dir = root / "models"
 
-            main(
-                [
-                    "--data-dir",
-                    str(data_dir),
-                    "--output-dir",
-                    str(output_dir),
-                    "--data-format",
-                    "conversations",
-                    "--vocab-size",
-                    "256",
-                    "--context-length",
-                    "2",
-                    "--embedding-dim",
-                    "4",
-                    "--heads",
-                    "1",
-                    "--layers",
-                    "1",
-                    "--steps",
-                    "1",
-                    "--batch-size",
-                    "1",
-                    "--eval-interval",
-                    "1",
-                    "--eval-batches",
-                    "1",
-                    "--prompt",
-                    "",
-                ]
-            )
+            with patch(
+                "bitgenesis.train.load_config",
+                return_value=load_config(config_path),
+            ):
+                main(
+                    [
+                        "--data-dir",
+                        str(data_dir),
+                        "--output-dir",
+                        str(output_dir),
+                        "--data-format",
+                        "conversations",
+                        "--context-length",
+                        "1",
+                        "--embedding-dim",
+                        "8",
+                        "--heads",
+                        "2",
+                        "--steps",
+                        "1",
+                        "--batch-size",
+                        "1",
+                        "--eval-interval",
+                        "1",
+                        "--eval-batches",
+                        "1",
+                        "--generate-tokens",
+                        "3",
+                        "--temperature",
+                        "0.9",
+                        "--prompt",
+                        "",
+                    ]
+                )
 
             report_path = output_dir / "training_metrics.json"
             report = json.loads(report_path.read_text(encoding="utf-8"))
@@ -119,6 +134,21 @@ class TrainCommandTests(unittest.TestCase):
             self.assertEqual(report["configuration"]["seed"], 42)
             self.assertEqual(report["configuration"]["training_examples"], 1)
             self.assertEqual(report["configuration"]["validation_examples"], 1)
+            self.assertGreaterEqual(
+                report["configuration"]["model"]["vocab_size"], 256
+            )
+            self.assertLessEqual(report["configuration"]["model"]["vocab_size"], 259)
+            self.assertEqual(
+                report["configuration"]["model"]["context_length"], 1
+            )
+            self.assertEqual(
+                report["configuration"]["model"]["embedding_dim"], 8
+            )
+            self.assertEqual(report["configuration"]["model"]["num_heads"], 2)
+            self.assertEqual(report["configuration"]["model"]["num_layers"], 1)
+            self.assertEqual(report["configuration"]["model"]["dropout"], 0.0)
+            self.assertEqual(report["configuration"]["generate_tokens"], 3)
+            self.assertEqual(report["configuration"]["temperature"], 0.9)
             self.assertEqual(len(report["history"]), 1)
             self.assertEqual(report["history"][0]["step"], 1.0)
             self.assertTrue((output_dir / "bitgenesis.pt").is_file())

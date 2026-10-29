@@ -17,7 +17,10 @@ These goals are under active development.
 
 ## Configuration
 
-The initial configuration is stored in [`config.toml`](config.toml). It sets Italian as the default language and defines local directories for datasets and model files.
+The initial configuration is stored in [`config.toml`](config.toml). It sets
+Italian as the default language, local dataset and model directories, text
+generation and evaluation defaults, and the model architecture used by
+training. Command-line options override these defaults.
 
 See [install.md](install.md) for Windows setup and verification instructions.
 

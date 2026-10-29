@@ -162,8 +162,16 @@ def main(argv: list[str] | None = None) -> None:
         "--output", type=Path, default=config.models_dir / "evaluation_results.jsonl"
     )
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--temperature", type=float, default=0.7)
-    parser.add_argument("--max-new-tokens", type=int, default=160)
+    parser.add_argument(
+        "--temperature",
+        type=float,
+        default=config.evaluation.temperature,
+    )
+    parser.add_argument(
+        "--max-new-tokens",
+        type=int,
+        default=config.evaluation.max_new_tokens,
+    )
     args = parser.parse_args(argv)
 
     if not math.isfinite(args.temperature) or args.temperature <= 0:

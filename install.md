@@ -40,6 +40,41 @@ with random weights; the result depends on the amount, quality, and permitted
 use of your local text. Training a tiny example is not expected to produce
 useful conversational behavior.
 
+## Configure generation and model defaults
+
+Edit `config.toml` to set the default generation length and temperature, the
+evaluation settings, and the model dimensions used by training. For example:
+
+```toml
+[generation]
+max_new_tokens = 80
+temperature = 1.0
+
+[evaluation]
+max_new_tokens = 160
+temperature = 0.7
+
+[model]
+vocab_size = 1000
+context_length = 128
+embedding_dim = 64
+heads = 4
+layers = 2
+dropout = 0.1
+```
+
+Command-line options take precedence over the configuration. For example:
+
+```powershell
+python -m bitgenesis --max-new-tokens 120 --temperature 0.8
+python -m bitgenesis.generate --prompt "Ciao" --max-new-tokens 120 --temperature 0.8
+python -m bitgenesis.train --data-format conversations --context-length 96 --embedding-dim 48 --heads 4
+python -m bitgenesis.evaluate --temperature 0.6 --max-new-tokens 120
+```
+
+Values are checked when the configuration is loaded; invalid temperatures,
+token counts, or incompatible model dimensions produce an error.
+
 ## Verify the installation
 
 Run the test suite from the repository root:

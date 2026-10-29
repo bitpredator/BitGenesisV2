@@ -155,12 +155,36 @@ class RunChatTests(unittest.TestCase):
             patch("bitgenesis.__main__.run_chat") as run_chat_mock,
         ):
             load_config.return_value.models_dir = Path("local/models")
-            main()
+            load_config.return_value.generation.max_new_tokens = 12
+            load_config.return_value.generation.temperature = 0.6
+            main([])
 
         load_config.assert_called_once_with()
         run_chat_mock.assert_called_once_with(
             model_path=Path("local/models/bitgenesis.pt"),
             tokenizer_path=Path("local/models/tokenizer.json"),
+            max_new_tokens=12,
+            temperature=0.6,
+        )
+
+    def test_command_line_overrides_generation_settings(self) -> None:
+        with (
+            patch("bitgenesis.__main__.load_config") as load_config,
+            patch("bitgenesis.__main__.run_chat") as run_chat_mock,
+        ):
+            load_config.return_value.models_dir = Path("local/models")
+            load_config.return_value.generation.max_new_tokens = 12
+            load_config.return_value.generation.temperature = 0.6
+            main(["--max-new-tokens", "24", "--temperature", "0.8"])
+
+        self.assertEqual(
+            run_chat_mock.call_args.kwargs,
+            {
+                "model_path": Path("local/models/bitgenesis.pt"),
+                "tokenizer_path": Path("local/models/tokenizer.json"),
+                "max_new_tokens": 24,
+                "temperature": 0.8,
+            },
         )
 
 
