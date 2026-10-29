@@ -3,6 +3,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from bitgenesis.__main__ import main, run_chat
+from bitgenesis.generate import ContextLengthError
 
 
 class RunChatTests(unittest.TestCase):
@@ -23,6 +24,10 @@ class RunChatTests(unittest.TestCase):
         )
         self.assertIn(
             f"  |{'Risposte sperimentali: possono essere imprecise.'.center(52)}|",
+            output,
+        )
+        self.assertIn(
+            f"  |{'/compact riassume i turni precedenti.'.center(52)}|",
             output,
         )
         self.assertEqual(output[-1], "  BitGenesis > A presto!")
@@ -107,6 +112,122 @@ class RunChatTests(unittest.TestCase):
         self.assertEqual(chat.reply.call_count, 2)
         self.assertEqual(history_snapshots, [[], [("Ciao", "Salve!")]])
         self.assertIn("  BitGenesis > Sono BitGenesis.", output)
+
+    def test_compact_previews_summary_and_applies_it_after_confirmation(self) -> None:
+        messages = iter(["Ciao", "Come stai?", "/compact", "s", "E poi?", "esci"])
+        output: list[str] = []
+        history_snapshots: list[list[tuple[str, str]]] = []
+        compact_snapshots: list[list[tuple[str, str]]] = []
+
+        with (
+            patch.object(Path, "is_file", return_value=True),
+            patch("bitgenesis.__main__.ConversationChat") as chat_class,
+        ):
+            chat = chat_class.return_value
+            def compact_history(
+                history: list[tuple[str, str]],
+            ) -> tuple[str, list[tuple[str, str]], int]:
+                compact_snapshots.append(list(history))
+                summary = "L'utente ha salutato."
+                return (
+                    summary,
+                    [
+                        ("Riassunto della conversazione precedente", summary),
+                        history[-1],
+                    ],
+                    1,
+                )
+
+            chat.compact.side_effect = compact_history
+            chat.reply.side_effect = lambda _prompt, history, **_kwargs: (
+                history_snapshots.append(list(history))
+                or ("Salve", "Sto bene", "Continuiamo")[len(history_snapshots) - 1]
+            )
+
+            run_chat(
+                input_fn=lambda _prompt: next(messages),
+                output_fn=output.append,
+                model_path=Path("model.pt"),
+                tokenizer_path=Path("tokenizer.json"),
+            )
+
+        self.assertEqual(
+            compact_snapshots,
+            [[("Ciao", "Salve"), ("Come stai?", "Sto bene")]],
+        )
+        self.assertEqual(
+            history_snapshots[-1],
+            [
+                ("Riassunto della conversazione precedente", "L'utente ha salutato."),
+                ("Come stai?", "Sto bene"),
+            ],
+        )
+        self.assertTrue(
+            any("1 scambio riassunto, 1 recenti mantenuti" in line for line in output)
+        )
+
+    def test_compact_cancel_keeps_original_history(self) -> None:
+        messages = iter(["Ciao", "Come stai?", "/compact", "n", "E poi?", "esci"])
+        output: list[str] = []
+        history_snapshots: list[list[tuple[str, str]]] = []
+
+        with (
+            patch.object(Path, "is_file", return_value=True),
+            patch("bitgenesis.__main__.ConversationChat") as chat_class,
+        ):
+            chat = chat_class.return_value
+
+            def reply_with_history(
+                _prompt: str,
+                history: list[tuple[str, str]],
+                **_kwargs: object,
+            ) -> str:
+                history_snapshots.append(list(history))
+                return ("Salve", "Sto bene", "Continuiamo")[
+                    len(history_snapshots) - 1
+                ]
+
+            chat.reply.side_effect = reply_with_history
+            chat.compact.return_value = (
+                "Riepilogo proposto",
+                [("Riassunto", "Riepilogo proposto"), ("Come stai?", "Sto bene")],
+                1,
+            )
+            run_chat(
+                input_fn=lambda _prompt: next(messages),
+                output_fn=output.append,
+                model_path=Path("model.pt"),
+                tokenizer_path=Path("tokenizer.json"),
+            )
+
+        self.assertEqual(
+            history_snapshots[-1],
+            [("Ciao", "Salve"), ("Come stai?", "Sto bene")],
+        )
+        self.assertIn(
+            "  BitGenesis > Compattazione annullata; cronologia invariata.",
+            output,
+        )
+
+    def test_reports_overlong_message_without_ending_the_chat(self) -> None:
+        messages = iter(["messaggio troppo lungo", "esci"])
+        output: list[str] = []
+
+        with (
+            patch.object(Path, "is_file", return_value=True),
+            patch("bitgenesis.__main__.ConversationChat") as chat_class,
+        ):
+            chat = chat_class.return_value
+            chat.reply.side_effect = ContextLengthError("Messaggio troppo lungo.")
+            run_chat(
+                input_fn=lambda _prompt: next(messages),
+                output_fn=output.append,
+                model_path=Path("model.pt"),
+                tokenizer_path=Path("tokenizer.json"),
+            )
+
+        self.assertIn("  BitGenesis > Messaggio troppo lungo.", output)
+        self.assertEqual(output[-1], "  BitGenesis > A presto!")
 
     def test_reports_missing_checkpoint_files_without_attempting_generation(
         self,

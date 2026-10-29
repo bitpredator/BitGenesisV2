@@ -113,7 +113,13 @@ training a conversation model as described below,
 `python -m bitgenesis` loads the local checkpoint and tokenizer and generates
 responses during the session. It reports a clear message if either artifact is
 missing. Previous user/assistant turns are included in subsequent prompts
-during the session; conversation history is not saved after exit.
+during the session; when the context window fills, the newest complete turns
+are used. A message that cannot fit on its own is rejected with an explanation.
+Type `/compact` to ask the local model for a summary of older turns. BitGenesis
+shows the proposed summary and only replaces the in-memory history after you
+confirm; declining leaves it unchanged. Summaries are experimental and may
+omit details, so review them before accepting. Conversation history is not
+saved after exit.
 
 ## Add local training data
 

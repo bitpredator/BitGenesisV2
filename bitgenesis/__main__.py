@@ -6,7 +6,11 @@ import math
 from pathlib import Path
 
 from bitgenesis.config import load_config
-from bitgenesis.generate import ConversationChat
+from bitgenesis.generate import (
+    CompactionError,
+    ContextLengthError,
+    ConversationChat,
+)
 
 _EXIT_COMMANDS = {"esci", "exit", "quit", "uscita"}
 _BANNER_WIDTH = 52
@@ -32,6 +36,9 @@ def _write_welcome(
     write_output(f"  |{status.center(_BANNER_WIDTH)}|")
     write_output(
         f"  |{'Risposte sperimentali: possono essere imprecise.'.center(_BANNER_WIDTH)}|"
+    )
+    write_output(
+        f"  |{'/compact riassume i turni precedenti.'.center(_BANNER_WIDTH)}|"
     )
     write_output(f"  |{'Digita esci per terminare.'.center(_BANNER_WIDTH)}|")
     write_output(border)
@@ -69,6 +76,60 @@ def run_chat(
         if message.strip().casefold() in _EXIT_COMMANDS:
             write_output("  BitGenesis > A presto!")
             return
+        if message.strip().casefold() == "/compact":
+            if not history:
+                write_output(
+                    "  BitGenesis > Non ci sono ancora scambi da compattare."
+                )
+                continue
+            if (
+                model_path is None
+                or tokenizer_path is None
+                or not model_path.is_file()
+                or not tokenizer_path.is_file()
+            ):
+                write_output(
+                    "  BitGenesis > Serve un modello conversazionale disponibile "
+                    "per creare un riepilogo."
+                )
+                continue
+            if chat is None:
+                chat = ConversationChat(model_path, tokenizer_path)
+            try:
+                summary, compacted_history, kept_turns = chat.compact(history)
+            except CompactionError as error:
+                write_output(f"  BitGenesis > Compattazione non riuscita: {error}")
+                continue
+
+            write_output("  BitGenesis > Riepilogo proposto:")
+            for line in summary.splitlines():
+                write_output(f"    {line}")
+            write_output(
+                "  BitGenesis > Il riepilogo potrebbe omettere dettagli. "
+                "Applicarlo? (s/n)"
+            )
+            try:
+                confirmation = read_input("  Confermi > ").strip().casefold()
+            except (EOFError, KeyboardInterrupt):
+                confirmation = ""
+            if confirmation in {"s", "si", "sì"}:
+                summarized_turns = len(history) - kept_turns
+                history[:] = compacted_history
+                summarized_label = (
+                    "1 scambio riassunto"
+                    if summarized_turns == 1
+                    else f"{summarized_turns} scambi riassunti"
+                )
+                write_output(
+                    f"  BitGenesis > Conversazione compattata: "
+                    f"{summarized_label}, "
+                    f"{kept_turns} recenti mantenuti."
+                )
+            else:
+                write_output(
+                    "  BitGenesis > Compattazione annullata; cronologia invariata."
+                )
+            continue
         if message.strip():
             if model_path is None or tokenizer_path is None:
                 write_output(
@@ -84,12 +145,16 @@ def run_chat(
                 continue
             if chat is None:
                 chat = ConversationChat(model_path, tokenizer_path)
-            response = chat.reply(
-                message.strip(),
-                history,
-                max_new_tokens=max_new_tokens,
-                temperature=temperature,
-            )
+            try:
+                response = chat.reply(
+                    message.strip(),
+                    history,
+                    max_new_tokens=max_new_tokens,
+                    temperature=temperature,
+                )
+            except ContextLengthError as error:
+                write_output(f"  BitGenesis > {error}")
+                continue
             write_output(f"  BitGenesis > {response or '[risposta vuota]'}")
             history.append((message.strip(), response))
 

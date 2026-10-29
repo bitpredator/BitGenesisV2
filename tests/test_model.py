@@ -2,12 +2,19 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import torch
 
 from bitgenesis.corpus import Conversation
-from bitgenesis.generate import generate_from_model, generate_text
+from bitgenesis.generate import (
+    CompactionError,
+    ContextLengthError,
+    ConversationChat,
+    fit_history_to_context,
+    generate_from_model,
+    generate_text,
+)
 from bitgenesis.model import BitGenesisLM, ModelConfig
 from bitgenesis.tokenizer import BPETokenizer
 from bitgenesis.training import (
@@ -20,11 +27,11 @@ from bitgenesis.training import (
 )
 
 
-def make_model(vocab_size: int = 256) -> BitGenesisLM:
+def make_model(vocab_size: int = 256, context_length: int = 8) -> BitGenesisLM:
     return BitGenesisLM(
         ModelConfig(
             vocab_size=vocab_size,
-            context_length=8,
+            context_length=context_length,
             embedding_dim=16,
             num_heads=4,
             num_layers=1,
@@ -42,6 +49,71 @@ class ModelConfigTests(unittest.TestCase):
 
 
 class BitGenesisLMTests(unittest.TestCase):
+    def test_chat_context_keeps_newest_complete_turns(self) -> None:
+        tokenizer = BPETokenizer.train(["Ciao", "Risposta"], vocab_size=256)
+        history = [
+            ("Primo turno", "Prima risposta"),
+            ("Secondo turno", "Seconda risposta"),
+            ("Ultimo turno", "Ultima risposta"),
+        ]
+        context_length = len(tokenizer.encode_chat_prompt("x", history[-1:]))
+
+        retained = fit_history_to_context(
+            tokenizer,
+            "x",
+            history,
+            context_length,
+        )
+
+        self.assertEqual(retained, history[-1:])
+
+    def test_rejects_chat_message_that_exceeds_context(self) -> None:
+        tokenizer = BPETokenizer.train(["Ciao"], vocab_size=256)
+
+        with self.assertRaisesRegex(ContextLengthError, "troppo lungo"):
+            fit_history_to_context(
+                tokenizer,
+                "messaggio troppo lungo",
+                [],
+                context_length=8,
+            )
+
+    def test_compaction_summarizes_old_turns_and_keeps_recent_ones(self) -> None:
+        tokenizer = BPETokenizer.train(
+            ["Riassumi in italiano fatti preferenze questioni aperte", "Ciao"],
+            vocab_size=300,
+        )
+        model = make_model(tokenizer.vocab_size, context_length=256)
+        chat = object.__new__(ConversationChat)
+        chat.tokenizer = tokenizer
+        chat.model = model
+        chat.reply = Mock(return_value="L'utente preferisce risposte brevi.")
+        history = [
+            ("Ciao", "Salve"),
+            ("Preferisco risposte brevi", "Va bene"),
+            ("Qual è il piano?", "Continuiamo con il progetto"),
+        ]
+
+        summary, compacted_history, kept_turns = chat.compact(history)
+
+        self.assertEqual(summary, "L'utente preferisce risposte brevi.")
+        self.assertEqual(
+            compacted_history[0],
+            ("Riassunto della conversazione precedente", summary),
+        )
+        self.assertEqual(compacted_history[-1], history[-1])
+        self.assertGreaterEqual(kept_turns, 1)
+        self.assertEqual(chat.reply.call_count, 1)
+
+    def test_compaction_requires_more_than_one_turn(self) -> None:
+        tokenizer = BPETokenizer.train(["Ciao"], vocab_size=256)
+        chat = object.__new__(ConversationChat)
+        chat.tokenizer = tokenizer
+        chat.model = make_model(tokenizer.vocab_size)
+
+        with self.assertRaisesRegex(CompactionError, "almeno due"):
+            chat.compact([("Ciao", "Salve")])
+
     def test_forward_computes_next_token_loss(self) -> None:
         model = make_model()
         token_ids = torch.randint(0, 256, (2, 8))
@@ -239,7 +311,7 @@ class TrainingTests(unittest.TestCase):
             loaded_tokenizer = BPETokenizer.load(tokenizer_path)
             loaded_model = load_checkpoint(model_path, tokenizer=loaded_tokenizer)
             generated = generate_text(
-                "ciao bitgenesis",
+                "ciao",
                 str(model_path),
                 str(tokenizer_path),
                 max_new_tokens=2,
