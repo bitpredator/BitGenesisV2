@@ -23,6 +23,9 @@ generation and evaluation defaults, and the model architecture used by
 training. Command-line options override these defaults.
 
 See [install.md](install.md) for Windows setup and verification instructions.
+That guide also describes the currently known software and hardware
+requirements; RAM and storage recommendations are pending reproducible
+measurements.
 
 The configuration loader requires Python 3.11 or newer and uses only the Python standard library:
 
