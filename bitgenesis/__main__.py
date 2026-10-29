@@ -4,6 +4,8 @@ from collections.abc import Callable, Sequence
 import argparse
 import math
 from pathlib import Path
+import re
+from typing import Literal, TypeGuard
 
 from bitgenesis.config import load_config
 from bitgenesis.generate import (
@@ -14,6 +16,58 @@ from bitgenesis.generate import (
 
 _EXIT_COMMANDS = {"esci", "exit", "quit", "uscita"}
 _BANNER_WIDTH = 52
+EffortLevel = Literal["auto", "minimo", "medio", "alto"]
+GenerationEffort = Literal["minimo", "medio", "alto"]
+_EFFORT_LEVELS: tuple[EffortLevel, ...] = ("auto", "minimo", "medio", "alto")
+_HIGH_EFFORT_CUES = {
+    "analizza",
+    "confronta",
+    "crea",
+    "debug",
+    "differenze",
+    "implementa",
+    "piano",
+    "perche",
+    "perché",
+    "progetta",
+    "proponi",
+    "riassumi",
+    "scrivi",
+    "spiega",
+    "spiegami",
+    "sintetizza",
+    "valuta",
+}
+
+
+def _is_effort_level(value: str) -> TypeGuard[EffortLevel]:
+    return value in _EFFORT_LEVELS
+
+
+def _choose_effort(
+    prompt: str,
+    requested_effort: EffortLevel,
+) -> GenerationEffort:
+    if requested_effort != "auto":
+        return requested_effort
+    words = re.findall(r"\w+", prompt.casefold())
+    if len(words) > 14 or _HIGH_EFFORT_CUES.intersection(words):
+        return "alto"
+    if len(words) > 5 or "?" in prompt:
+        return "medio"
+    return "minimo"
+
+
+def _effort_token_budget(base_tokens: int, effort: GenerationEffort) -> int:
+    if base_tokens == 0:
+        return 0
+    if effort == "minimo":
+        return max(1, base_tokens // 4)
+    if effort == "medio":
+        return base_tokens
+    if effort == "alto":
+        return base_tokens * 2
+    raise ValueError(f"Livello di impegno non valido: {effort}")
 
 
 def _write_welcome(
@@ -40,6 +94,8 @@ def _write_welcome(
     write_output(
         f"  |{'/compact riassume i turni precedenti.'.center(_BANNER_WIDTH)}|"
     )
+    effort_hint = "/impegno auto|minimo|medio|alto cambia il livello."
+    write_output(f"  |{effort_hint.center(_BANNER_WIDTH)}|")
     write_output(f"  |{'Digita esci per terminare.'.center(_BANNER_WIDTH)}|")
     write_output(border)
     write_output("")
@@ -52,6 +108,7 @@ def run_chat(
     tokenizer_path: Path | None = None,
     max_new_tokens: int = 80,
     temperature: float = 1.0,
+    effort: EffortLevel = "auto",
 ) -> None:
     """Run the Italian terminal chat using a saved local model when available."""
     read_input = input if input_fn is None else input_fn
@@ -66,6 +123,7 @@ def run_chat(
     _write_welcome(write_output, model_files_found)
     history: list[tuple[str, str]] = []
     chat: ConversationChat | None = None
+    current_effort = effort
     while True:
         try:
             message = read_input("  Tu > ")
@@ -76,6 +134,22 @@ def run_chat(
         if message.strip().casefold() in _EXIT_COMMANDS:
             write_output("  BitGenesis > A presto!")
             return
+        command = message.strip().casefold().split()
+        if command and command[0] == "/impegno":
+            if len(command) == 1:
+                write_output(
+                    f"  BitGenesis > Impegno attuale: {current_effort}. "
+                    "Usa /impegno auto|minimo|medio|alto per cambiarlo."
+                )
+            elif len(command) == 2 and _is_effort_level(command[1]):
+                current_effort = command[1]
+                write_output(f"  BitGenesis > Impegno impostato: {current_effort}.")
+            else:
+                write_output(
+                    "  BitGenesis > Livello non valido. Usa "
+                    "/impegno auto|minimo|medio|alto."
+                )
+            continue
         if message.strip().casefold() == "/compact":
             if not history:
                 write_output(
@@ -145,11 +219,19 @@ def run_chat(
                 continue
             if chat is None:
                 chat = ConversationChat(model_path, tokenizer_path)
+            selected_effort = _choose_effort(message.strip(), current_effort)
+            token_budget = _effort_token_budget(max_new_tokens, selected_effort)
+            effort_label = (
+                f"{selected_effort} (automatico)"
+                if current_effort == "auto"
+                else selected_effort
+            )
+            write_output(f"  BitGenesis > Impegno: {effort_label}.")
             try:
                 response = chat.reply(
                     message.strip(),
                     history,
-                    max_new_tokens=max_new_tokens,
+                    max_new_tokens=token_budget,
                     temperature=temperature,
                 )
             except ContextLengthError as error:
@@ -172,6 +254,12 @@ def main(argv: Sequence[str] | None = None) -> None:
         type=float,
         default=config.generation.temperature,
     )
+    parser.add_argument(
+        "--effort",
+        choices=_EFFORT_LEVELS,
+        default="auto",
+        help="Livello di impegno iniziale della chat (default: auto).",
+    )
     args = parser.parse_args(argv)
     if args.max_new_tokens < 0:
         parser.error("--max-new-tokens must not be negative")
@@ -185,6 +273,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         tokenizer_path=tokenizer_path,
         max_new_tokens=args.max_new_tokens,
         temperature=args.temperature,
+        effort=args.effort,
     )
 
 

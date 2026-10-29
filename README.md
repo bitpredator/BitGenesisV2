@@ -52,8 +52,9 @@ The initial interface accepts Italian text and exits when you type `esci` (or
 the local checkpoint and tokenizer, uses previous turns in the current session
 as context, and generates replies. Type `/compact` to preview a locally
 generated summary of older turns; it replaces the in-memory history only after
-you confirm. Without a trained conversation model, the interface explains how
-to train one.
+you confirm. Choose generation effort with `/impegno auto|minimo|medio|alto`;
+the `--effort` option sets the starting level. Without a trained conversation
+model, the interface explains how to train one.
 
 ## Local text data and tokenizer
 

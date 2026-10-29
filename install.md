@@ -84,7 +84,7 @@ dropout = 0.1
 Command-line options take precedence over the configuration. For example:
 
 ```powershell
-python -m bitgenesis --max-new-tokens 120 --temperature 0.8
+python -m bitgenesis --max-new-tokens 120 --temperature 0.8 --effort auto
 python -m bitgenesis.generate --prompt "Ciao" --max-new-tokens 120 --temperature 0.8
 python -m bitgenesis.train --data-format conversations --context-length 96 --embedding-dim 48 --heads 4
 python -m bitgenesis.evaluate --temperature 0.6 --max-new-tokens 120
@@ -92,6 +92,15 @@ python -m bitgenesis.evaluate --temperature 0.6 --max-new-tokens 120
 
 Values are checked when the configuration is loaded; invalid temperatures,
 token counts, or incompatible model dimensions produce an error.
+
+During chat, use `/impegno auto`, `/impegno minimo`, `/impegno medio`, or
+`/impegno alto` to change the effort level; `/impegno` displays the current
+setting. Auto uses simple request cues to select a level: short messages use
+minimum, ordinary questions use medium, and longer or task-oriented requests
+use high. Minimum uses one quarter of `max_new_tokens`, medium uses the
+configured value, and high uses twice that value. These levels change only the
+maximum response length; they do not add reasoning capabilities or guarantee
+more accurate answers.
 
 ## Verify the installation
 

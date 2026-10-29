@@ -30,6 +30,12 @@ class RunChatTests(unittest.TestCase):
             f"  |{'/compact riassume i turni precedenti.'.center(52)}|",
             output,
         )
+        self.assertTrue(
+            any(
+                "/impegno auto|minimo|medio|alto cambia il livello." in line
+                for line in output
+            )
+        )
         self.assertEqual(output[-1], "  BitGenesis > A presto!")
 
     def test_reports_missing_model_and_exits_in_italian(self) -> None:
@@ -76,7 +82,7 @@ class RunChatTests(unittest.TestCase):
             self.assertEqual(chat.reply.call_args.args[0], "Ciao!")
             self.assertEqual(
                 {key: value for key, value in chat.reply.call_args.kwargs.items()},
-                {"max_new_tokens": 12, "temperature": 0.7},
+                {"max_new_tokens": 3, "temperature": 0.7},
             )
         self.assertEqual(history_snapshots, [[]])
         self.assertIn("  BitGenesis > Salve!", output)
@@ -112,6 +118,62 @@ class RunChatTests(unittest.TestCase):
         self.assertEqual(chat.reply.call_count, 2)
         self.assertEqual(history_snapshots, [[], [("Ciao", "Salve!")]])
         self.assertIn("  BitGenesis > Sono BitGenesis.", output)
+
+    def test_auto_effort_scales_generation_for_request_complexity(self) -> None:
+        messages = iter(["Ciao", "Come stai?", "Spiegami la differenza", "esci"])
+        output: list[str] = []
+
+        with (
+            patch.object(Path, "is_file", return_value=True),
+            patch("bitgenesis.__main__.ConversationChat") as chat_class,
+        ):
+            chat = chat_class.return_value
+            chat.reply.return_value = "Risposta."
+            run_chat(
+                input_fn=lambda _prompt: next(messages),
+                output_fn=output.append,
+                model_path=Path("model.pt"),
+                tokenizer_path=Path("tokenizer.json"),
+                max_new_tokens=80,
+            )
+
+        self.assertEqual(
+            [
+                call.kwargs["max_new_tokens"]
+                for call in chat.reply.call_args_list
+            ],
+            [20, 80, 160],
+        )
+        self.assertTrue(any("minimo (automatico)" in line for line in output))
+        self.assertTrue(any("medio (automatico)" in line for line in output))
+        self.assertTrue(any("alto (automatico)" in line for line in output))
+
+    def test_effort_command_changes_and_reports_chat_mode(self) -> None:
+        messages = iter(["/impegno alto", "Ciao", "/impegno", "esci"])
+        output: list[str] = []
+
+        with (
+            patch.object(Path, "is_file", return_value=True),
+            patch("bitgenesis.__main__.ConversationChat") as chat_class,
+        ):
+            chat_class.return_value.reply.return_value = "Salve."
+            run_chat(
+                input_fn=lambda _prompt: next(messages),
+                output_fn=output.append,
+                model_path=Path("model.pt"),
+                tokenizer_path=Path("tokenizer.json"),
+            )
+
+        self.assertEqual(
+            chat_class.return_value.reply.call_args.kwargs["max_new_tokens"],
+            160,
+        )
+        self.assertIn("  BitGenesis > Impegno impostato: alto.", output)
+        self.assertIn(
+            "  BitGenesis > Impegno attuale: alto. "
+            "Usa /impegno auto|minimo|medio|alto per cambiarlo.",
+            output,
+        )
 
     def test_compact_previews_summary_and_applies_it_after_confirmation(self) -> None:
         messages = iter(["Ciao", "Come stai?", "/compact", "s", "E poi?", "esci"])
@@ -286,6 +348,7 @@ class RunChatTests(unittest.TestCase):
             tokenizer_path=Path("local/models/tokenizer.json"),
             max_new_tokens=12,
             temperature=0.6,
+            effort="auto",
         )
 
     def test_command_line_overrides_generation_settings(self) -> None:
@@ -296,7 +359,16 @@ class RunChatTests(unittest.TestCase):
             load_config.return_value.models_dir = Path("local/models")
             load_config.return_value.generation.max_new_tokens = 12
             load_config.return_value.generation.temperature = 0.6
-            main(["--max-new-tokens", "24", "--temperature", "0.8"])
+            main(
+                [
+                    "--max-new-tokens",
+                    "24",
+                    "--temperature",
+                    "0.8",
+                    "--effort",
+                    "alto",
+                ]
+            )
 
         self.assertEqual(
             run_chat_mock.call_args.kwargs,
@@ -305,6 +377,7 @@ class RunChatTests(unittest.TestCase):
                 "tokenizer_path": Path("local/models/tokenizer.json"),
                 "max_new_tokens": 24,
                 "temperature": 0.8,
+                "effort": "alto",
             },
         )
 
