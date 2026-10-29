@@ -105,6 +105,30 @@ class SplitCorpusTests(unittest.TestCase):
 
 
 class LoadConversationsTests(unittest.TestCase):
+    def test_programming_curriculum_is_valid_training_data(self) -> None:
+        dataset_dir = (
+            Path(__file__).resolve().parents[1] / "data" / "datasets"
+        )
+
+        records = load_conversation_records(dataset_dir)
+        lessons = [
+            record.content
+            for record in records
+            if record.path.name == "programmazione_python_basi.jsonl"
+        ]
+        lesson_text = "\n".join(
+            message
+            for conversation in lessons
+            for turn in conversation.turns
+            for message in turn
+        )
+
+        self.assertEqual(len(lessons), 11)
+        self.assertIn('print("Ciao!")', lesson_text)
+        self.assertIn('nome = "Ada"', lesson_text)
+        self.assertIn("somma = a + b", lesson_text)
+        self.assertIn("Vivo a Roma", lesson_text)
+
     def test_loads_jsonl_conversations_recursively_in_stable_order(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

@@ -84,6 +84,27 @@ The JSONL report records each response, selected level, generated token count,
 and generation time. Review response quality manually using the criteria in
 the report; timing and length alone do not measure correctness.
 
+## Learn Python programming basics
+
+The included conversation corpus now contains a small Italian pilot lesson on
+`print()`, variables, strings and numbers, arithmetic, f-strings, common
+mistakes, and guided exercises. Train it together with the other included
+conversation examples:
+
+```console
+python -m bitgenesis.train --data-format conversations --steps 1000
+```
+
+After training, evaluate basic programming explanations with the separate
+prompt set:
+
+```console
+python -m bitgenesis.evaluate --cases data/evaluation/programming_prompts.jsonl --output data/models/programming_results.jsonl
+```
+
+This is a small experimental dataset, not evidence that the model can reliably
+write or run programs. Review the generated explanations and code manually.
+
 ## Local text data and tokenizer
 
 Place UTF-8 `.txt` files in `data/datasets/` (subdirectories are read too). Each

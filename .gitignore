@@ -26,7 +26,9 @@ credentials*.json
 # Local datasets and trained model files
 data/datasets/*
 !data/datasets/esempi_sintetici.jsonl
+!data/datasets/programmazione_python_basi.jsonl
 data/models/
+NEXT_STEPS.md
 
 # Build output and logs
 build/
