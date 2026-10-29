@@ -1,3 +1,4 @@
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -14,6 +15,7 @@ from bitgenesis.training import (
     get_batch,
     load_checkpoint,
     save_checkpoint,
+    save_training_report,
     train_model,
 )
 
@@ -123,6 +125,38 @@ class BitGenesisLMTests(unittest.TestCase):
 
 
 class TrainingTests(unittest.TestCase):
+    def test_saves_training_configuration_and_loss_history(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "nested" / "training_metrics.json"
+            save_training_report(
+                path,
+                configuration={"seed": 42, "data_format": "conversations"},
+                history=[{"step": 1.0, "train": 1.5, "validation": 2.0}],
+            )
+
+            report = json.loads(path.read_text(encoding="utf-8"))
+
+        self.assertEqual(report["format_version"], 1)
+        self.assertEqual(
+            report["configuration"],
+            {"seed": 42, "data_format": "conversations"},
+        )
+        self.assertEqual(
+            report["history"],
+            [{"step": 1.0, "train": 1.5, "validation": 2.0}],
+        )
+
+    def test_rejects_non_finite_training_metrics(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "training_metrics.json"
+            with self.assertRaises(ValueError):
+                save_training_report(
+                    path,
+                    configuration={},
+                    history=[{"step": 1.0, "train": float("nan")}],
+                )
+            self.assertFalse(path.exists())
+
     def test_batches_pair_each_input_with_next_token_target(self) -> None:
         tokens = torch.arange(20)
 

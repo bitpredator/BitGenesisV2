@@ -10,12 +10,13 @@ import torch
 from bitgenesis.config import load_config
 from bitgenesis.corpus import load_conversations, load_corpus, split_corpus
 from bitgenesis.generate import generate_from_model, generate_text_from_model
-from bitgenesis.model import BitGenesisLM, ModelConfig
+from bitgenesis.model import BitGenesisLM, ModelConfig, model_config_to_dict
 from bitgenesis.tokenizer import BPETokenizer
 from bitgenesis.training import (
     encode_conversations,
     encode_documents,
     save_checkpoint,
+    save_training_report,
     train_model,
 )
 
@@ -29,6 +30,11 @@ def main(argv: Sequence[str] | None = None) -> None:
     )
     parser.add_argument("--data-dir", default=str(config.datasets_dir))
     parser.add_argument("--output-dir", default=str(config.models_dir))
+    parser.add_argument(
+        "--metrics-output",
+        type=Path,
+        help="Save the training configuration and loss history to this JSON file.",
+    )
     parser.add_argument(
         "--data-format",
         choices=("text", "conversations"),
@@ -58,6 +64,23 @@ def main(argv: Sequence[str] | None = None) -> None:
         parser.error(
             "--validation-fraction must be greater than 0 and less than 1 for training."
         )
+
+    output_dir = Path(args.output_dir)
+    checkpoint_path = output_dir / "bitgenesis.pt"
+    tokenizer_path = output_dir / "tokenizer.json"
+    metrics_path = args.metrics_output or output_dir / "training_metrics.json"
+    if metrics_path.resolve() in {
+        checkpoint_path.resolve(),
+        tokenizer_path.resolve(),
+    }:
+        parser.error("--metrics-output must not overwrite the model or tokenizer.")
+    data_suffix = ".txt" if args.data_format == "text" else ".jsonl"
+    if metrics_path.resolve() in {
+        path.resolve()
+        for path in Path(args.data_dir).rglob(f"*{data_suffix}")
+        if path.is_file()
+    }:
+        parser.error("--metrics-output must not overwrite training data.")
 
     torch.manual_seed(args.seed)
     if args.data_format == "text":
@@ -137,14 +160,32 @@ def main(argv: Sequence[str] | None = None) -> None:
         validation_target_mask=validation_target_mask,
     )
 
-    output_dir = Path(args.output_dir)
-    checkpoint_path = output_dir / "bitgenesis.pt"
-    tokenizer_path = output_dir / "tokenizer.json"
     save_checkpoint(model, checkpoint_path, tokenizer)
     tokenizer.save(tokenizer_path)
+    save_training_report(
+        metrics_path,
+        configuration={
+            "data_format": args.data_format,
+            "data_dir": str(Path(args.data_dir)),
+            "training_examples": len(split.train),
+            "validation_examples": len(split.validation),
+            "training_tokens": int(train_tokens.numel()),
+            "validation_tokens": int(validation_tokens.numel()),
+            "model": model_config_to_dict(model_config),
+            "steps": args.steps,
+            "batch_size": args.batch_size,
+            "learning_rate": args.learning_rate,
+            "eval_interval": args.eval_interval,
+            "eval_batches": args.eval_batches,
+            "validation_fraction": args.validation_fraction,
+            "seed": args.seed,
+        },
+        history=history,
+    )
 
     print(f"Modello salvato in: {checkpoint_path}")
     print(f"Tokenizer salvato in: {tokenizer_path}")
+    print(f"Metriche di training salvate in: {metrics_path}")
     for result in history:
         print(
             f"Passo {int(result['step'])}: "

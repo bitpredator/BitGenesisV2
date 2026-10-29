@@ -83,7 +83,10 @@ the optional PyTorch setup, structured conversation data format, and commands
 for training and response generation. Conversational training calculates the
 loss only for assistant response tokens and response-end markers; user messages
 and role markers provide context without contributing to the loss. Plain-text
-training continues to use all next-token targets.
+training continues to use all next-token targets. Training saves its run
+configuration and sampled train/validation loss history to
+`data/models/training_metrics.json`; use `--metrics-output` to choose another
+path. These losses help track experiments but do not measure response quality.
 
 ## Status
 

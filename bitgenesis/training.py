@@ -1,6 +1,7 @@
 """Utilities for training the language model on local token sequences."""
 
 from collections.abc import Sequence
+import json
 import math
 from pathlib import Path
 
@@ -221,6 +222,37 @@ def train_model(
             record = {"step": float(step), **measured_losses}
             history.append(record)
     return history
+
+
+def save_training_report(
+    path: Path,
+    *,
+    configuration: dict[str, object],
+    history: Sequence[dict[str, float]],
+) -> None:
+    """Save training settings and measured losses as a local JSON report."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path = path.with_name(f".{path.name}.tmp")
+    try:
+        temporary_path.write_text(
+            json.dumps(
+                {
+                    "format_version": 1,
+                    "configuration": configuration,
+                    "history": list(history),
+                },
+                ensure_ascii=False,
+                indent=2,
+                allow_nan=False,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        temporary_path.replace(path)
+    finally:
+        if temporary_path.exists():
+            temporary_path.unlink()
 
 
 def save_checkpoint(

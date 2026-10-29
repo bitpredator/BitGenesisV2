@@ -103,9 +103,14 @@ Training data and model artifacts are saved locally in the ignored `data`
 directory. The default model is intentionally small and CPU-oriented. Adjust
 the context length, model dimensions, batch size, and step count for your
 hardware and dataset. The training command prints periodic training and
-validation losses and a short generated reply. The tokenizer marks user and
-assistant roles and an end-of-response token; generation stops at that marker
-or when the token limit is reached. For conversational data, the loss is
+validation losses and saves the run settings and loss history to
+`data\models\training_metrics.json`. Use `--metrics-output` to choose a
+different report path, and a different `--output-dir` for each run you want to
+keep. The losses are sampled estimates for monitoring training, not a measure
+of answer quality. The command also prints a short generated reply. The
+tokenizer marks user and assistant roles and an end-of-response token;
+generation stops at that marker or when the token limit is reached. For
+conversational data, the loss is
 calculated only on assistant response tokens and end-of-response markers;
 user messages and role markers are context only. Plain-text training continues
 to calculate loss on every next-token target.
