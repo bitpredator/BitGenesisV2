@@ -190,4 +190,5 @@ BitGenesis is licensed under the MIT License. See [LICENSE](LICENSE) for details
 Bug reports, feature requests, and contribution proposals can be submitted
 through the [GitHub issue templates](.github/ISSUE_TEMPLATE). See
 [CONTRIBUTING.md](.github/CONTRIBUTING.md) for development and pull request
-guidelines.
+guidelines. For security concerns, see [Security.md](Security.md) and report
+vulnerabilities privately rather than in a public issue.
