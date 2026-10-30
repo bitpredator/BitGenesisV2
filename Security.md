@@ -33,6 +33,14 @@ public disclosure with the maintainers after a fix or mitigation is available.
 There is no published support matrix; support for previous versions is not
 guaranteed.
 
+## Automated code scanning
+
+The repository runs CodeQL analysis on pushes and pull requests targeting
+`main`, as well as on a weekly schedule. Automated static analysis can help
+identify some vulnerability patterns, but it does not guarantee that the
+project is free of vulnerabilities and does not replace security review or
+responsible testing.
+
 ## Data and local use
 
 Datasets, `Genesis.md` files, checkpoints, and local reports may contain
