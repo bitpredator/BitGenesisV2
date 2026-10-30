@@ -4,6 +4,7 @@ from collections.abc import Callable, Sequence
 import argparse
 import math
 from pathlib import Path
+from typing import Literal
 
 from bitgenesis.config import load_config
 from bitgenesis.effort import (
@@ -23,6 +24,19 @@ from bitgenesis.generate import (
 _EXIT_COMMANDS = {"esci", "exit", "quit", "uscita"}
 _BANNER_WIDTH = 52
 _LOCAL_USER_NAME = "Utente"
+AgentName = Literal["chat", "coding"]
+_AGENT_INSTRUCTIONS: dict[AgentName, str] = {
+    "chat": (
+        "Sei l'agente chat di BitGenesis. Aiuta l'utente con domande e "
+        "conversazioni generali in modo chiaro e conciso."
+    ),
+    "coding": (
+        "Sei l'agente coding di BitGenesis. Aiuta a comprendere, scrivere, "
+        "correggere e testare codice. Spiega le decisioni in modo pratico, "
+        "segnala le ipotesi e non affermare di aver eseguito codice o test "
+        "che non sono stati eseguiti."
+    ),
+}
 
 
 def _write_welcome(
@@ -52,6 +66,7 @@ def _write_welcome(
     write_output(
         f"  |{'/genesis gestisce istruzioni permanenti.'.center(_BANNER_WIDTH)}|"
     )
+    write_output(f"  |{'/agente chat|coding seleziona il profilo.'.center(_BANNER_WIDTH)}|")
     effort_hint = "/impegno auto|minimo|medio|alto cambia il livello."
     write_output(f"  |{effort_hint.center(_BANNER_WIDTH)}|")
     if model_files_found:
@@ -89,6 +104,7 @@ def run_chat(
     history: list[tuple[str, str]] = []
     chat: ConversationChat | None = None
     current_effort = effort
+    current_agent: AgentName = "chat"
     while True:
         try:
             message = read_input("  Tu > ")
@@ -113,6 +129,23 @@ def run_chat(
                 write_output(
                     "  BitGenesis > Livello non valido. Usa "
                     "/impegno auto|minimo|medio|alto."
+                )
+            continue
+        if command and command[0] == "/agente":
+            if len(command) == 1:
+                write_output(
+                    f"  BitGenesis > Agente attuale: {current_agent}. "
+                    "Usa /agente chat oppure /agente coding per cambiarlo."
+                )
+            elif len(command) == 2 and command[1] in ("chat", "coding"):
+                current_agent = command[1]
+                write_output(
+                    f"  BitGenesis > Agente impostato: {current_agent}."
+                )
+            else:
+                write_output(
+                    "  BitGenesis > Agente non valido. Usa "
+                    "/agente chat oppure /agente coding."
                 )
             continue
         if command and command[0] == "/genesis":
@@ -248,11 +281,21 @@ def run_chat(
                     f"{project_genesis_path}: {error}"
                 )
                 continue
+            prompt_sections = []
+            if current_agent == "coding":
+                prompt_sections.append(
+                    "Istruzioni per l'agente coding:\n"
+                    f"{_AGENT_INSTRUCTIONS[current_agent]}"
+                )
             if project_instructions:
-                prompt = (
+                prompt_sections.append(
                     "Istruzioni permanenti del progetto da Genesis.md:\n"
-                    f"{project_instructions}\n\n"
-                    f"Richiesta dell'utente: {message.strip()}"
+                    f"{project_instructions}"
+                )
+            if prompt_sections:
+                prompt = (
+                    "\n\n".join(prompt_sections)
+                    + f"\n\nRichiesta dell'utente: {message.strip()}"
                 )
             else:
                 prompt = message.strip()

@@ -56,6 +56,14 @@ you confirm. Choose generation effort with `/impegno auto|minimo|medio|alto`;
 the `--effort` option sets the starting level. Without a trained conversation
 model, the interface explains how to train one.
 
+Choose between two profiles in the same chat with `/agente chat` or
+`/agente coding`; `/agente` displays the active profile. Chat is the default.
+The coding profile guides responses toward understanding, writing, fixing, and
+testing code, while the chat profile is for general conversation. Both
+profiles share the same local model, conversation history, and `Genesis.md`
+instructions; they are not separately trained models, and their capabilities
+depend on the training data.
+
 Project instructions can be stored in `Genesis.md` in the directory where
 BitGenesis is started. Use `/genesis aggiungi <testo>` to append instructions,
 `/genesis sostituisci <testo>` to replace them, and `/genesis mostra` to review

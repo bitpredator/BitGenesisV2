@@ -147,10 +147,11 @@ class LoadConversationsTests(unittest.TestCase):
             for message in turn
         )
 
-        self.assertEqual(len(lessons), 5)
+        self.assertEqual(len(lessons), 6)
         for command in (
             "/compact",
             "/impegno auto",
+            "/agente coding",
             "/genesis aggiungi",
             "--checkpoint-interval",
             "--resume-from",

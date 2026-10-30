@@ -195,6 +195,69 @@ class RunChatTests(unittest.TestCase):
             output,
         )
 
+    def test_agent_command_switches_between_chat_and_coding_profiles(self) -> None:
+        messages = iter(
+            [
+                "/agente",
+                "/agente coding",
+                "Scrivi una funzione Python.",
+                "/agente chat",
+                "Ciao",
+                "/agente automatico",
+                "esci",
+            ]
+        )
+        output: list[str] = []
+        calls: list[
+            tuple[str, list[tuple[str, str]], dict[str, object]]
+        ] = []
+
+        with (
+            patch.object(Path, "is_file", return_value=True),
+            patch("bitgenesis.__main__.ConversationChat") as chat_class,
+        ):
+            chat = chat_class.return_value
+
+            def record_reply(
+                prompt: str,
+                history: list[tuple[str, str]],
+                **kwargs: object,
+            ) -> str:
+                calls.append((prompt, list(history), kwargs))
+                return "Risposta."
+
+            chat.reply.side_effect = record_reply
+            run_chat(
+                input_fn=lambda _prompt: next(messages),
+                output_fn=output.append,
+                model_path=Path("model.pt"),
+                tokenizer_path=Path("tokenizer.json"),
+            )
+
+        self.assertIn(
+            "  BitGenesis > Agente attuale: chat. "
+            "Usa /agente chat oppure /agente coding per cambiarlo.",
+            output,
+        )
+        self.assertIn("  BitGenesis > Agente impostato: coding.", output)
+        self.assertIn("  BitGenesis > Agente impostato: chat.", output)
+        self.assertIn(
+            "  BitGenesis > Agente non valido. Usa "
+            "/agente chat oppure /agente coding.",
+            output,
+        )
+        self.assertIn("Istruzioni per l'agente coding:", calls[0][0])
+        self.assertIn("Scrivi una funzione Python.", calls[0][0])
+        self.assertEqual(calls[1][0], "Ciao")
+        self.assertEqual(
+            calls[1][1][0],
+            ("Scrivi una funzione Python.", "Risposta."),
+        )
+        self.assertEqual(
+            calls[0][2],
+            {"max_new_tokens": 160, "temperature": 1.0},
+        )
+
     def test_genesis_command_updates_and_shows_project_instructions(self) -> None:
         messages = iter(
             [

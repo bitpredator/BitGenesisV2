@@ -143,6 +143,12 @@ confirm; declining leaves it unchanged. Summaries are experimental and may
 omit details, so review them before accepting. Conversation history is not
 saved after exit.
 
+The chat starts with the general `chat` profile. Switch profiles with
+`/agente chat` or `/agente coding`; `/agente` displays the active profile. The
+coding profile guides responses toward coding tasks, but both profiles use the
+same checkpoint and share conversation history and `Genesis.md` instructions.
+They do not represent separately trained models.
+
 Project-specific persistent instructions are stored in `Genesis.md` in the
 directory where BitGenesis was started. Use `/genesis aggiungi <testo>` to
 append instructions, `/genesis sostituisci <testo>` to replace the current
