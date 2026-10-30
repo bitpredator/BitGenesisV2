@@ -56,6 +56,14 @@ you confirm. Choose generation effort with `/impegno auto|minimo|medio|alto`;
 the `--effort` option sets the starting level. Without a trained conversation
 model, the interface explains how to train one.
 
+Project instructions can be stored in `Genesis.md` in the directory where
+BitGenesis is started. Use `/genesis aggiungi <testo>` to append instructions,
+`/genesis sostituisci <testo>` to replace them, and `/genesis mostra` to review
+the current text. The file is read for each reply and included in the chat
+context; BitGenesis changes it only through these explicit commands, not by
+guessing from ordinary conversation. The experimental model may not reliably
+follow the instructions.
+
 In local mode BitGenesis always addresses the person using it as `Utente`;
 there is no local nickname setting. Choosing a personal nickname is reserved
 for a future official server, where it can be associated with a verified
@@ -94,7 +102,8 @@ the report; timing and length alone do not measure correctness.
 The included conversation corpus now contains a small Italian pilot lesson on
 `print()`, variables, strings and numbers, arithmetic, f-strings, common
 mistakes, and guided exercises. Train it together with the other included
-conversation examples:
+conversation examples, including a reference to the interactive and
+command-line BitGenesis commands:
 
 ```console
 python -m bitgenesis.train --data-format conversations --steps 1000

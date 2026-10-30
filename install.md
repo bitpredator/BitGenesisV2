@@ -143,6 +143,14 @@ confirm; declining leaves it unchanged. Summaries are experimental and may
 omit details, so review them before accepting. Conversation history is not
 saved after exit.
 
+Project-specific persistent instructions are stored in `Genesis.md` in the
+directory where BitGenesis was started. Use `/genesis aggiungi <testo>` to
+append instructions, `/genesis sostituisci <testo>` to replace the current
+instructions, and `/genesis mostra` to read them back. The file is loaded for
+each generated reply. Changes are explicit; ordinary conversation never writes
+to the file. As with other generated replies, the experimental model may not
+reliably follow the instructions.
+
 In local mode, BitGenesis always addresses the person using it as `Utente`;
 nicknames cannot be selected or reserved locally. Personal nicknames may be
 added in a future official-server version and associated with verified

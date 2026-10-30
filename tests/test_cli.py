@@ -1,3 +1,4 @@
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -193,6 +194,121 @@ class RunChatTests(unittest.TestCase):
             "Usa /impegno auto|minimo|medio|alto per cambiarlo.",
             output,
         )
+
+    def test_genesis_command_updates_and_shows_project_instructions(self) -> None:
+        messages = iter(
+            [
+                "/genesis aggiungi Usa Python 3.11.",
+                "/genesis aggiungi Scrivi test.",
+                "/genesis mostra",
+                "Ciao",
+                "esci",
+            ]
+        )
+        output: list[str] = []
+        prompt_contexts: list[tuple[str, list[tuple[str, str]], dict[str, object]]] = []
+
+        with (
+            tempfile.TemporaryDirectory() as temp_dir,
+            patch.object(Path, "is_file", return_value=True),
+            patch("bitgenesis.__main__.ConversationChat") as chat_class,
+        ):
+            genesis_path = Path(temp_dir) / "Genesis.md"
+            chat = chat_class.return_value
+
+            def record_prompt(
+                prompt: str,
+                history: list[tuple[str, str]],
+                **kwargs: object,
+            ) -> str:
+                prompt_contexts.append((prompt, list(history), kwargs))
+                return "Ciao."
+
+            chat.reply.side_effect = record_prompt
+            run_chat(
+                input_fn=lambda _prompt: next(messages),
+                output_fn=output.append,
+                model_path=Path("model.pt"),
+                tokenizer_path=Path("tokenizer.json"),
+                genesis_path=genesis_path,
+            )
+
+            self.assertEqual(
+                genesis_path.read_text(encoding="utf-8"),
+                "# Istruzioni permanenti per BitGenesis\n\n"
+                "Usa Python 3.11.\n\nScrivi test.\n",
+            )
+
+        self.assertIn(
+            f"  BitGenesis > Istruzioni aggiunte in {genesis_path}.",
+            output,
+        )
+        self.assertTrue(
+            any("Usa Python 3.11.\n\nScrivi test." in line for line in output)
+        )
+        self.assertEqual(
+            [context[0] for context in prompt_contexts],
+            [
+                "Istruzioni permanenti del progetto da Genesis.md:\n"
+                "Usa Python 3.11.\n\nScrivi test.\n\n"
+                "Richiesta dell'utente: Ciao"
+            ],
+        )
+        self.assertEqual(
+            prompt_contexts[0][1],
+            [
+                (
+                    "Regola per questa chat locale: chiama l'utente Utente.",
+                    "In questa chat locale chiamerò l'utente Utente.",
+                )
+            ],
+        )
+        self.assertEqual(
+            prompt_contexts[0][2],
+            {"max_new_tokens": 20, "temperature": 1.0},
+        )
+
+    def test_genesis_replace_replaces_previous_instructions(self) -> None:
+        messages = iter(
+            [
+                "/genesis aggiungi Usa Python.",
+                "/genesis sostituisci Rispondi in italiano.",
+                "/genesis mostra",
+                "esci",
+            ]
+        )
+        output: list[str] = []
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            genesis_path = Path(temp_dir) / "Genesis.md"
+            run_chat(
+                input_fn=lambda _prompt: next(messages),
+                output_fn=output.append,
+                genesis_path=genesis_path,
+            )
+
+            self.assertEqual(
+                genesis_path.read_text(encoding="utf-8"),
+                "# Istruzioni permanenti per BitGenesis\n\n"
+                "Rispondi in italiano.\n",
+            )
+        self.assertIn("Rispondi in italiano.", "\n".join(output))
+        self.assertNotIn("Usa Python.", "\n".join(output))
+
+    def test_ordinary_chat_does_not_modify_genesis_file(self) -> None:
+        messages = iter(["Ricorda di usare Python.", "esci"])
+        output: list[str] = []
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            genesis_path = Path(temp_dir) / "Genesis.md"
+            run_chat(
+                input_fn=lambda _prompt: next(messages),
+                output_fn=output.append,
+                genesis_path=genesis_path,
+            )
+
+        self.assertFalse(genesis_path.exists())
+        self.assertIn("Modello non disponibile.", "\n".join(output))
 
     def test_local_user_name_is_fixed_in_context(self) -> None:
         messages = iter(["Ciao", "Come mi chiamo?", "esci"])

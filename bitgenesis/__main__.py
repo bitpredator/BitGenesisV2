@@ -13,6 +13,7 @@ from bitgenesis.effort import (
     effort_token_budget,
     is_effort_level,
 )
+from bitgenesis.genesis import read_instructions, update_instructions
 from bitgenesis.generate import (
     CompactionError,
     ContextLengthError,
@@ -48,6 +49,9 @@ def _write_welcome(
     write_output(
         f"  |{'/compact riassume i turni precedenti.'.center(_BANNER_WIDTH)}|"
     )
+    write_output(
+        f"  |{'/genesis gestisce istruzioni permanenti.'.center(_BANNER_WIDTH)}|"
+    )
     effort_hint = "/impegno auto|minimo|medio|alto cambia il livello."
     write_output(f"  |{effort_hint.center(_BANNER_WIDTH)}|")
     if model_files_found:
@@ -66,10 +70,14 @@ def run_chat(
     max_new_tokens: int = 80,
     temperature: float = 1.0,
     effort: EffortLevel = "auto",
+    genesis_path: Path | None = None,
 ) -> None:
     """Run the Italian terminal chat using a saved local model when available."""
     read_input = input if input_fn is None else input_fn
     write_output = print if output_fn is None else output_fn
+    project_genesis_path = (
+        Path.cwd() / "Genesis.md" if genesis_path is None else Path(genesis_path)
+    )
 
     model_files_found = (
         model_path is not None
@@ -105,6 +113,53 @@ def run_chat(
                 write_output(
                     "  BitGenesis > Livello non valido. Usa "
                     "/impegno auto|minimo|medio|alto."
+                )
+            continue
+        if command and command[0] == "/genesis":
+            parts = message.strip().split(maxsplit=2)
+            action = parts[1].casefold() if len(parts) > 1 else ""
+            if action == "mostra" and len(parts) == 2:
+                try:
+                    instructions = read_instructions(project_genesis_path)
+                except (OSError, UnicodeError) as error:
+                    write_output(
+                        f"  BitGenesis > Non riesco a leggere "
+                        f"{project_genesis_path}: {error}"
+                    )
+                else:
+                    if instructions:
+                        write_output(
+                            f"  BitGenesis > Istruzioni in "
+                            f"{project_genesis_path}:\n{instructions}"
+                        )
+                    else:
+                        write_output(
+                            "  BitGenesis > Non ci sono istruzioni permanenti. "
+                            "Usa /genesis aggiungi <testo>."
+                        )
+            elif action in {"aggiungi", "sostituisci"} and len(parts) == 3:
+                try:
+                    update_instructions(
+                        project_genesis_path,
+                        parts[2],
+                        replace=action == "sostituisci",
+                    )
+                except (OSError, ValueError) as error:
+                    write_output(
+                        f"  BitGenesis > Non riesco ad aggiornare "
+                        f"{project_genesis_path}: {error}"
+                    )
+                else:
+                    verb = "aggiunte" if action == "aggiungi" else "aggiornate"
+                    write_output(
+                        f"  BitGenesis > Istruzioni {verb} in "
+                        f"{project_genesis_path}."
+                    )
+            else:
+                write_output(
+                    "  BitGenesis > Usa /genesis mostra, "
+                    "/genesis aggiungi <testo> oppure "
+                    "/genesis sostituisci <testo>."
                 )
             continue
         if message.strip().casefold() == "/compact":
@@ -184,17 +239,33 @@ def run_chat(
                 else selected_effort
             )
             write_output(f"  BitGenesis > Impegno: {effort_label}.")
-            chat_history = [
-                *history,
+            chat_history = list(history)
+            try:
+                project_instructions = read_instructions(project_genesis_path)
+            except (OSError, UnicodeError) as error:
+                write_output(
+                    f"  BitGenesis > Non riesco a leggere "
+                    f"{project_genesis_path}: {error}"
+                )
+                continue
+            if project_instructions:
+                prompt = (
+                    "Istruzioni permanenti del progetto da Genesis.md:\n"
+                    f"{project_instructions}\n\n"
+                    f"Richiesta dell'utente: {message.strip()}"
+                )
+            else:
+                prompt = message.strip()
+            chat_history.append(
                 (
                     f"Regola per questa chat locale: chiama l'utente "
                     f"{_LOCAL_USER_NAME}.",
                     f"In questa chat locale chiamerò l'utente {_LOCAL_USER_NAME}.",
-                ),
-            ]
+                )
+            )
             try:
                 response = chat.reply(
-                    message.strip(),
+                    prompt,
                     chat_history,
                     max_new_tokens=token_budget,
                     temperature=temperature,
