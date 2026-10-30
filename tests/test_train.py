@@ -167,11 +167,52 @@ class TrainCommandTests(unittest.TestCase):
             self.assertEqual(len(report["history"]), 1)
             self.assertEqual(report["history"][0]["step"], 1.0)
             self.assertTrue((output_dir / "bitgenesis.pt").is_file())
+            self.assertTrue((output_dir / "bitgenesis_training.pt").is_file())
             self.assertTrue((output_dir / "tokenizer.json").is_file())
             warning = warnings.getvalue()
             self.assertIn("1 gruppo di duplicati esatti", warning)
             self.assertIn("examples.jsonl:1", warning)
             self.assertIn("examples.jsonl:3", warning)
+
+            with patch(
+                "bitgenesis.train.load_config",
+                return_value=load_config(config_path),
+            ):
+                main(
+                    [
+                        "--data-dir",
+                        str(data_dir),
+                        "--output-dir",
+                        str(output_dir),
+                        "--data-format",
+                        "conversations",
+                        "--context-length",
+                        "1",
+                        "--embedding-dim",
+                        "8",
+                        "--heads",
+                        "2",
+                        "--steps",
+                        "2",
+                        "--batch-size",
+                        "1",
+                        "--eval-interval",
+                        "1",
+                        "--eval-batches",
+                        "1",
+                        "--generate-tokens",
+                        "0",
+                        "--temperature",
+                        "0.9",
+                        "--prompt",
+                        "",
+                        "--resume",
+                    ]
+                )
+
+            resumed_report = json.loads(report_path.read_text(encoding="utf-8"))
+            self.assertEqual(len(resumed_report["history"]), 2)
+            self.assertEqual(resumed_report["history"][-1]["step"], 2.0)
 
 
 if __name__ == "__main__":

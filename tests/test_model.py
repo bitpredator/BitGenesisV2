@@ -18,16 +18,23 @@ from bitgenesis.generate import (
 from bitgenesis.model import BitGenesisLM, ModelConfig
 from bitgenesis.tokenizer import BPETokenizer
 from bitgenesis.training import (
+    TrainingCheckpointState,
     encode_conversations,
+    fingerprint_training_data,
     get_batch,
     load_checkpoint,
+    load_training_checkpoint,
     save_checkpoint,
     save_training_report,
     train_model,
 )
 
 
-def make_model(vocab_size: int = 256, context_length: int = 8) -> BitGenesisLM:
+def make_model(
+    vocab_size: int = 256,
+    context_length: int = 8,
+    dropout: float = 0,
+) -> BitGenesisLM:
     return BitGenesisLM(
         ModelConfig(
             vocab_size=vocab_size,
@@ -35,7 +42,7 @@ def make_model(vocab_size: int = 256, context_length: int = 8) -> BitGenesisLM:
             embedding_dim=16,
             num_heads=4,
             num_layers=1,
-            dropout=0,
+            dropout=dropout,
         )
     )
 
@@ -255,6 +262,106 @@ class TrainingTests(unittest.TestCase):
             self.assertGreater(valid_offsets.numel(), 0)
             self.assertTrue(torch.all(target_mask[row[valid_offsets]]))
 
+    def test_resume_restores_model_optimizer_and_random_states(self) -> None:
+        tokenizer = BPETokenizer.train(["test"], vocab_size=256)
+        train_tokens = torch.arange(40) % 256
+        validation_tokens = torch.arange(32) % 256
+        configuration = {"batch_size": 2}
+        data_fingerprint = fingerprint_training_data(
+            train_tokens,
+            validation_tokens,
+        )
+
+        torch.manual_seed(19)
+        expected_model = make_model(vocab_size=tokenizer.vocab_size, dropout=0.2)
+        expected_history = train_model(
+            expected_model,
+            train_tokens,
+            validation_tokens,
+            steps=4,
+            batch_size=2,
+            eval_interval=1,
+            eval_batches=1,
+            seed=13,
+        )
+
+        torch.manual_seed(19)
+        partial_model = make_model(vocab_size=tokenizer.vocab_size, dropout=0.2)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            checkpoint_path = Path(temp_dir) / "resume.pt"
+
+            class CheckpointReached(Exception):
+                pass
+
+            def save_and_interrupt(
+                step: int,
+                model: BitGenesisLM,
+                optimizer: torch.optim.Optimizer,
+                generator: torch.Generator,
+                history: list[dict[str, float]],
+            ) -> None:
+                if step != 2:
+                    return
+                save_checkpoint(
+                    model,
+                    checkpoint_path,
+                    tokenizer,
+                    TrainingCheckpointState(
+                        step=step,
+                        optimizer_state=optimizer.state_dict(),
+                        generator_state=generator.get_state(),
+                        rng_state=torch.get_rng_state(),
+                        configuration=configuration,
+                        data_fingerprint=data_fingerprint,
+                        history=list(history),
+                    ),
+                )
+                raise CheckpointReached
+
+            with self.assertRaises(CheckpointReached):
+                train_model(
+                    partial_model,
+                    train_tokens,
+                    validation_tokens,
+                    steps=4,
+                    batch_size=2,
+                    eval_interval=1,
+                    eval_batches=1,
+                    seed=13,
+                    checkpoint_interval=2,
+                    checkpoint_callback=save_and_interrupt,
+                )
+
+            resumed_model, state = load_training_checkpoint(
+                checkpoint_path,
+                tokenizer=tokenizer,
+            )
+            self.assertIsNotNone(state)
+            assert state is not None
+            resumed_history = train_model(
+                resumed_model,
+                train_tokens,
+                validation_tokens,
+                steps=4,
+                batch_size=2,
+                eval_interval=1,
+                eval_batches=1,
+                seed=13,
+                start_step=state.step,
+                optimizer_state=state.optimizer_state,
+                generator_state=state.generator_state,
+                rng_state=state.rng_state,
+                initial_history=state.history,
+            )
+
+        self.assertEqual(resumed_history, expected_history)
+        for expected, resumed in zip(
+            expected_model.parameters(),
+            resumed_model.parameters(),
+            strict=True,
+        ):
+            self.assertTrue(torch.equal(expected, resumed))
+
     def test_rejects_conversation_split_without_supervised_windows(self) -> None:
         with self.assertRaisesRegex(ValueError, "No training windows"):
             get_batch(
@@ -310,6 +417,10 @@ class TrainingTests(unittest.TestCase):
             tokenizer.save(tokenizer_path)
             loaded_tokenizer = BPETokenizer.load(tokenizer_path)
             loaded_model = load_checkpoint(model_path, tokenizer=loaded_tokenizer)
+            legacy_model, training_state = load_training_checkpoint(
+                model_path,
+                tokenizer=loaded_tokenizer,
+            )
             generated = generate_text(
                 "ciao",
                 str(model_path),
@@ -325,6 +436,8 @@ class TrainingTests(unittest.TestCase):
                 load_checkpoint(model_path, tokenizer=different_tokenizer)
 
         self.assertEqual(loaded_model.config, model.config)
+        self.assertEqual(legacy_model.config, model.config)
+        self.assertIsNone(training_state)
         self.assertEqual(loaded_model.training_format, "conversations")
         self.assertEqual(loaded_tokenizer.vocab_size, tokenizer.vocab_size)
         self.assertIsInstance(generated, str)

@@ -205,8 +205,30 @@ hardware and dataset. The training command prints periodic training and
 validation losses and saves the run settings and loss history to
 `data\models\training_metrics.json`. Use `--metrics-output` to choose a
 different report path, and a different `--output-dir` for each run you want to
-keep. The losses are sampled estimates for monitoring training, not a measure
-of answer quality. The command also prints a short generated reply. The
+keep. A resumable checkpoint, including the optimizer and random-number
+generator states, is periodically saved to
+`data\models\bitgenesis_training.pt`; the default interval is 100 steps and
+`--checkpoint-interval` changes it. The final inference checkpoint remains
+`data\models\bitgenesis.pt`. If interrupted, the latest periodic checkpoint
+limits lost work to at most one checkpoint interval; before the first
+checkpoint is written, there is nothing to resume yet.
+
+To resume the default checkpoint and train until a total of 2000 steps:
+
+```powershell
+python -m bitgenesis.train --data-format conversations --steps 2000 --resume
+```
+
+`--resume` prefers `bitgenesis_training.pt` and falls back to `bitgenesis.pt`
+for older model-only checkpoints. Use `--resume-from CHECKPOINT` to select
+another local file.
+Resumption checks the encoded dataset, tokenizer, model, and training settings;
+if they differ, training stops with an error. `--steps` is the total target step
+count, not the number of additional steps. Existing model-only checkpoints are
+still loadable and can be used with `--resume-from`; they resume from their
+weights with a fresh optimizer and step count. The losses are sampled estimates
+for monitoring training, not a measure of answer quality. The command also
+prints a short generated reply. The
 tokenizer marks user and assistant roles and an end-of-response token;
 generation stops at that marker or when the token limit is reached. For
 conversational data, the loss is

@@ -1,9 +1,12 @@
 """Utilities for training the language model on local token sequences."""
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
+import hashlib
 import json
 import math
 from pathlib import Path
+from typing import Any
 
 import torch
 from torch import Tensor
@@ -11,6 +14,29 @@ from torch import Tensor
 from bitgenesis.corpus import Conversation
 from bitgenesis.model import BitGenesisLM, ModelConfig, model_config_to_dict
 from bitgenesis.tokenizer import BPETokenizer
+
+
+@dataclass(frozen=True)
+class TrainingCheckpointState:
+    step: int
+    optimizer_state: dict[str, Any]
+    generator_state: Tensor
+    rng_state: Tensor
+    configuration: dict[str, object]
+    data_fingerprint: str
+    history: list[dict[str, float]]
+
+
+CheckpointCallback = Callable[
+    [
+        int,
+        BitGenesisLM,
+        torch.optim.Optimizer,
+        torch.Generator,
+        Sequence[dict[str, float]],
+    ],
+    None,
+]
 
 
 def encode_documents(tokenizer: BPETokenizer, documents: Sequence[str]) -> Tensor:
@@ -154,6 +180,30 @@ def estimate_loss(
     return results
 
 
+def fingerprint_training_data(
+    train_tokens: Tensor,
+    validation_tokens: Tensor,
+    train_target_mask: Tensor | None = None,
+    validation_target_mask: Tensor | None = None,
+) -> str:
+    """Return a stable digest of the encoded training and validation examples."""
+    digest = hashlib.sha256()
+    for tensor in (
+        train_tokens,
+        validation_tokens,
+        train_target_mask,
+        validation_target_mask,
+    ):
+        if tensor is None:
+            digest.update(b"\x00")
+            continue
+        value = tensor.detach().cpu().contiguous()
+        digest.update(str(value.dtype).encode("ascii"))
+        digest.update(str(tuple(value.shape)).encode("ascii"))
+        digest.update(value.numpy().tobytes())
+    return digest.hexdigest()
+
+
 def train_model(
     model: BitGenesisLM,
     train_tokens: Tensor,
@@ -168,26 +218,44 @@ def train_model(
     device: torch.device | str = "cpu",
     train_target_mask: Tensor | None = None,
     validation_target_mask: Tensor | None = None,
+    start_step: int = 0,
+    optimizer_state: dict[str, Any] | None = None,
+    generator_state: Tensor | None = None,
+    rng_state: Tensor | None = None,
+    initial_history: Sequence[dict[str, float]] = (),
+    checkpoint_interval: int = 100,
+    checkpoint_callback: CheckpointCallback | None = None,
 ) -> list[dict[str, float]]:
-    """Train from random initialization and return periodic loss measurements."""
+    """Train or resume a model and return its complete loss history."""
     for name, value in (
         ("steps", steps),
         ("batch_size", batch_size),
         ("eval_interval", eval_interval),
         ("eval_batches", eval_batches),
+        ("checkpoint_interval", checkpoint_interval),
     ):
         if isinstance(value, bool) or not isinstance(value, int) or value < 1:
             raise ValueError(f"{name} must be a positive integer")
+    if isinstance(start_step, bool) or not isinstance(start_step, int) or start_step < 0:
+        raise ValueError("start_step must be a non-negative integer")
+    if start_step >= steps:
+        raise ValueError("steps must be greater than the checkpoint step")
     if not math.isfinite(learning_rate) or learning_rate <= 0:
         raise ValueError("learning_rate must be a finite number greater than zero")
 
     device = torch.device(device)
     model.to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
+    if optimizer_state is not None:
+        optimizer.load_state_dict(optimizer_state)
     generator = torch.Generator().manual_seed(seed)
-    history: list[dict[str, float]] = []
+    if generator_state is not None:
+        generator.set_state(generator_state)
+    if rng_state is not None:
+        torch.set_rng_state(rng_state.cpu())
+    history = list(initial_history)
 
-    for step in range(1, steps + 1):
+    for step in range(start_step + 1, steps + 1):
         model.train()
         inputs, targets = get_batch(
             train_tokens,
@@ -221,6 +289,10 @@ def train_model(
             )
             record = {"step": float(step), **measured_losses}
             history.append(record)
+        if checkpoint_callback is not None and (
+            step % checkpoint_interval == 0 or step == steps
+        ):
+            checkpoint_callback(step, model, optimizer, generator, history)
     return history
 
 
@@ -259,6 +331,7 @@ def save_checkpoint(
     model: BitGenesisLM,
     path: Path,
     tokenizer: BPETokenizer,
+    training_state: TrainingCheckpointState | None = None,
 ) -> None:
     """Save model configuration and weights as a local PyTorch checkpoint."""
     if model.config.vocab_size != tokenizer.vocab_size:
@@ -269,31 +342,43 @@ def save_checkpoint(
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary_path = path.with_name(f".{path.name}.tmp")
     try:
-        torch.save(
-            {
+        payload: dict[str, object] = {
+            "format_version": 1,
+            "model_config": model_config_to_dict(model.config),
+            "state_dict": model.state_dict(),
+            "tokenizer_fingerprint": tokenizer.fingerprint,
+            "training_format": model.training_format,
+        }
+        if training_state is not None:
+            payload["training_state"] = {
                 "format_version": 1,
-                "model_config": model_config_to_dict(model.config),
-                "state_dict": model.state_dict(),
-                "tokenizer_fingerprint": tokenizer.fingerprint,
-                "training_format": model.training_format,
-            },
-            temporary_path,
-        )
+                "step": training_state.step,
+                "optimizer_state": training_state.optimizer_state,
+                "generator_state": training_state.generator_state,
+                "rng_state": training_state.rng_state,
+                "configuration": training_state.configuration,
+                "data_fingerprint": training_state.data_fingerprint,
+                "history": training_state.history,
+            }
+        torch.save(payload, temporary_path)
         temporary_path.replace(path)
     finally:
         if temporary_path.exists():
             temporary_path.unlink()
 
 
-def load_checkpoint(
-    path: Path,
-    device: torch.device | str = "cpu",
-    tokenizer: BPETokenizer | None = None,
-) -> BitGenesisLM:
-    """Load model weights from a trusted local checkpoint."""
+def _read_checkpoint(path: Path, device: torch.device | str) -> dict[str, Any]:
     payload = torch.load(Path(path), map_location=device, weights_only=True)
     if not isinstance(payload, dict) or payload.get("format_version") != 1:
         raise ValueError("Unsupported or invalid model checkpoint")
+    return payload
+
+
+def _load_model_from_checkpoint(
+    payload: dict[str, Any],
+    device: torch.device | str,
+    tokenizer: BPETokenizer | None,
+) -> BitGenesisLM:
     config_data = payload.get("model_config")
     state_dict = payload.get("state_dict")
     training_format = payload.get("training_format", "text")
@@ -324,3 +409,69 @@ def load_checkpoint(
     if training_format == "conversations":
         model.training_format = "conversations"
     return model.to(device)
+
+
+def load_training_checkpoint(
+    path: Path,
+    device: torch.device | str = "cpu",
+    tokenizer: BPETokenizer | None = None,
+) -> tuple[BitGenesisLM, TrainingCheckpointState | None]:
+    """Load model weights and optional resumable training state."""
+    payload = _read_checkpoint(path, device)
+    model = _load_model_from_checkpoint(payload, device, tokenizer)
+    state_data = payload.get("training_state")
+    if state_data is None:
+        return model, None
+    if not isinstance(state_data, dict) or state_data.get("format_version") != 1:
+        raise ValueError("Model checkpoint has an invalid training state")
+    step = state_data.get("step")
+    optimizer_state = state_data.get("optimizer_state")
+    generator_state = state_data.get("generator_state")
+    rng_state = state_data.get("rng_state")
+    configuration = state_data.get("configuration")
+    data_fingerprint = state_data.get("data_fingerprint")
+    history = state_data.get("history")
+    if (
+        isinstance(step, bool)
+        or not isinstance(step, int)
+        or step < 1
+        or not isinstance(optimizer_state, dict)
+        or not isinstance(generator_state, Tensor)
+        or generator_state.dtype != torch.uint8
+        or not isinstance(rng_state, Tensor)
+        or rng_state.dtype != torch.uint8
+        or not isinstance(configuration, dict)
+        or not isinstance(data_fingerprint, str)
+        or not isinstance(history, list)
+        or any(
+            not isinstance(record, dict)
+            or any(
+                not isinstance(key, str)
+                or isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or not math.isfinite(value)
+                for key, value in record.items()
+            )
+            for record in history
+        )
+    ):
+        raise ValueError("Model checkpoint has an invalid training state")
+    return model, TrainingCheckpointState(
+        step=step,
+        optimizer_state=optimizer_state,
+        generator_state=generator_state,
+        rng_state=rng_state,
+        configuration=configuration,
+        data_fingerprint=data_fingerprint,
+        history=history,
+    )
+
+
+def load_checkpoint(
+    path: Path,
+    device: torch.device | str = "cpu",
+    tokenizer: BPETokenizer | None = None,
+) -> BitGenesisLM:
+    """Load model weights from a trusted local checkpoint."""
+    payload = _read_checkpoint(path, device)
+    return _load_model_from_checkpoint(payload, device, tokenizer)

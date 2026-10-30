@@ -100,6 +100,20 @@ conversation examples:
 python -m bitgenesis.train --data-format conversations --steps 1000
 ```
 
+Training periodically saves a resumable checkpoint to
+`data/models/bitgenesis_training.pt`; adjust the frequency with
+`--checkpoint-interval`. To continue up to a total of 2000 steps, run:
+
+```console
+python -m bitgenesis.train --data-format conversations --steps 2000 --resume
+```
+
+Resuming requires the same encoded training data and training/model settings.
+The separate `bitgenesis.pt` remains the inference checkpoint. `--resume`
+prefers the resumable checkpoint and falls back to `bitgenesis.pt`. Older
+model-only checkpoints can be used as a starting point with `--resume-from`,
+but resume with a fresh optimizer and step count.
+
 After training, evaluate basic programming explanations with the separate
 prompt set:
 
