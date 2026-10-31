@@ -6,8 +6,9 @@ import math
 from pathlib import Path
 
 from bitgenesis.agents import (
-    AGENT_INSTRUCTIONS,
     AgentName,
+    build_response_prompt,
+    local_user_rule,
     self_introduction,
     simple_greeting,
 )
@@ -25,10 +26,10 @@ from bitgenesis.generate import (
     ContextLengthError,
     ConversationChat,
 )
+from bitgenesis.language import detect_language
 
 _EXIT_COMMANDS = {"esci", "exit", "quit", "uscita"}
 _BANNER_WIDTH = 52
-_LOCAL_USER_NAME = "Utente"
 
 
 def _write_welcome(
@@ -45,7 +46,7 @@ def _write_welcome(
     write_output(border)
     write_output(f"  |{'BITGENESIS'.center(_BANNER_WIDTH)}|")
     write_output(
-        f"  |{'Assistente IA sperimentale in italiano'.center(_BANNER_WIDTH)}|"
+        f"  |{'Assistente IA sperimentale: italiano e inglese'.center(_BANNER_WIDTH)}|"
     )
     write_output(border)
     write_output(f"  |{status.center(_BANNER_WIDTH)}|")
@@ -63,7 +64,9 @@ def _write_welcome(
     write_output(f"  |{effort_hint.center(_BANNER_WIDTH)}|")
     if model_files_found:
         name_hint = "In locale ti chiamerò Utente."
-        write_output(f"  |{name_hint.center(_BANNER_WIDTH)}|")
+        write_output(
+            f"  |{'Il nome usato dipende dalla lingua del messaggio.'.center(_BANNER_WIDTH)}|"
+        )
     write_output(f"  |{'Digita esci per terminare.'.center(_BANNER_WIDTH)}|")
     write_output(border)
     write_output("")
@@ -79,7 +82,7 @@ def run_chat(
     effort: EffortLevel = "auto",
     genesis_path: Path | None = None,
 ) -> None:
-    """Run the Italian terminal chat using a saved local model when available."""
+    """Run the terminal chat using a saved local model when available."""
     read_input = input if input_fn is None else input_fn
     write_output = print if output_fn is None else output_fn
     project_genesis_path = (
@@ -242,7 +245,8 @@ def run_chat(
                 )
             continue
         if message.strip():
-            introduction = self_introduction(message, current_agent)
+            language = detect_language(message)
+            introduction = self_introduction(message, current_agent, language)
             if introduction is not None:
                 write_output(f"  BitGenesis > {introduction}")
                 history.append((message.strip(), introduction))
@@ -259,7 +263,7 @@ def run_chat(
                     "'python -m bitgenesis.train --data-format conversations'."
                 )
                 continue
-            greeting = simple_greeting(message.strip(), current_agent)
+            greeting = simple_greeting(message.strip(), current_agent, language)
             if greeting is not None:
                 write_output(f"  BitGenesis > {greeting}")
                 history.append((message.strip(), greeting))
@@ -283,31 +287,13 @@ def run_chat(
                     f"{project_genesis_path}: {error}"
                 )
                 continue
-            prompt_sections = []
-            if current_agent == "coding":
-                prompt_sections.append(
-                    "Istruzioni per l'agente coding:\n"
-                    f"{AGENT_INSTRUCTIONS[current_agent]}"
-                )
-            if project_instructions:
-                prompt_sections.append(
-                    "Istruzioni permanenti del progetto da Genesis.md:\n"
-                    f"{project_instructions}"
-                )
-            if prompt_sections:
-                prompt = (
-                    "\n\n".join(prompt_sections)
-                    + f"\n\nRichiesta dell'utente: {message.strip()}"
-                )
-            else:
-                prompt = message.strip()
-            chat_history.append(
-                (
-                    f"Regola per questa chat locale: chiama l'utente "
-                    f"{_LOCAL_USER_NAME}.",
-                    f"In questa chat locale chiamerò l'utente {_LOCAL_USER_NAME}.",
-                )
+            prompt = build_response_prompt(
+                message.strip(),
+                current_agent,
+                project_instructions,
+                language,
             )
+            chat_history.append(local_user_rule(language))
             try:
                 response = chat.reply(
                     prompt,
@@ -324,7 +310,9 @@ def run_chat(
 
 def main(argv: Sequence[str] | None = None) -> None:
     config = load_config()
-    parser = argparse.ArgumentParser(description="Chat with BitGenesis in Italian.")
+    parser = argparse.ArgumentParser(
+        description="Chat with BitGenesis in Italian or English."
+    )
     parser.add_argument(
         "--max-new-tokens",
         type=int,

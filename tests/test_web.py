@@ -154,6 +154,48 @@ class WebInterfaceTests(unittest.TestCase):
         self.assertEqual(response["effort"], "non applicato")
         chat_class.assert_not_called()
 
+    def test_english_greeting_gets_a_deterministic_reply(self) -> None:
+        self.model_path.parent.mkdir(parents=True)
+        self.model_path.touch()
+        self.tokenizer_path.touch()
+        with patch("bitgenesis.generate.ConversationChat") as chat_class:
+            status, response = self.request(
+                "POST",
+                "/api/chat",
+                {"message": "Hello", "effort": "auto", "agent": "chat"},
+                origin=f"http://127.0.0.1:{self.server.server_port}",
+            )
+
+        self.assertEqual(status, 200)
+        self.assertEqual(
+            response["response"],
+            "Hello! I'm BitGenesis. How can I help?",
+        )
+        chat_class.assert_not_called()
+
+    def test_english_message_sets_response_language_for_the_model(self) -> None:
+        self.model_path.parent.mkdir(parents=True)
+        self.model_path.touch()
+        self.tokenizer_path.touch()
+        with patch("bitgenesis.generate.ConversationChat") as chat_class:
+            chat_class.return_value.reply.return_value = "A reply."
+            status, _response = self.request(
+                "POST",
+                "/api/chat",
+                {"message": "What can I do?", "effort": "auto", "agent": "chat"},
+                origin=f"http://127.0.0.1:{self.server.server_port}",
+            )
+
+        self.assertEqual(status, 200)
+        prompt = chat_class.return_value.reply.call_args.args[0]
+        self.assertIn("User request: What can I do?", prompt)
+        self.assertIn("reply in English", prompt)
+        self.assertIn(
+            ("Rule for this local chat: address the user as User.",
+             "In this local chat I will address the user as User."),
+            chat_class.return_value.reply.call_args.args[1],
+        )
+
     def test_chat_uses_local_model_and_selected_profile(self) -> None:
         self.model_path.parent.mkdir(parents=True)
         self.model_path.touch()
@@ -181,6 +223,7 @@ class WebInterfaceTests(unittest.TestCase):
         self.assertIn("Istruzioni per l'agente coding", call.args[0])
         self.assertIn("chiedi chiarimenti", call.args[0])
         self.assertIn("test non eseguiti", call.args[0])
+        self.assertIn("rispondi in italiano", call.args[0])
         self.assertEqual(call.kwargs["max_new_tokens"], 160)
 
     def test_saves_and_reads_project_instructions(self) -> None:

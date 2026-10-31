@@ -131,6 +131,33 @@ class RunChatTests(unittest.TestCase):
         chat_class.assert_called_once_with(Path("model.pt"), Path("tokenizer.json"))
         self.assertIn("  BitGenesis > Risposta del modello.", output)
 
+    def test_english_message_sets_response_language_for_the_model(self) -> None:
+        messages = iter(["How do I organize my work?", "exit"])
+        output: list[str] = []
+
+        with (
+            patch.object(Path, "is_file", return_value=True),
+            patch("bitgenesis.__main__.ConversationChat") as chat_class,
+        ):
+            chat_class.return_value.reply.return_value = "A reply."
+            run_chat(
+                input_fn=lambda _prompt: next(messages),
+                output_fn=output.append,
+                model_path=Path("model.pt"),
+                tokenizer_path=Path("tokenizer.json"),
+            )
+
+        prompt = chat_class.return_value.reply.call_args.args[0]
+        self.assertIn("User request: How do I organize my work?", prompt)
+        self.assertIn("reply in English", prompt)
+        self.assertIn(
+            (
+                "Rule for this local chat: address the user as User.",
+                "In this local chat I will address the user as User.",
+            ),
+            chat_class.return_value.reply.call_args.args[1],
+        )
+
     def test_generates_replies_using_local_model_paths(self) -> None:
         messages = iter([" Ciao, BitGenesis! ", "esci"])
         output: list[str] = []
@@ -157,12 +184,19 @@ class RunChatTests(unittest.TestCase):
             )
             self.assertIn("File modello: presenti", "\n".join(output))
             self.assertIn(
-                f"  |{'In locale ti chiamerò Utente.'.center(52)}|",
+                f"  |{'Il nome usato dipende dalla lingua del messaggio.'.center(52)}|",
                 output,
             )
             chat_class.assert_called_once_with(model_path, tokenizer_path)
             chat.reply.assert_called_once()
-            self.assertEqual(chat.reply.call_args.args[0], "Ciao, BitGenesis!")
+            self.assertIn(
+                "Richiesta dell'utente: Ciao, BitGenesis!",
+                chat.reply.call_args.args[0],
+            )
+            self.assertIn(
+                "rispondi in italiano",
+                chat.reply.call_args.args[0],
+            )
             self.assertEqual(
                 {key: value for key, value in chat.reply.call_args.kwargs.items()},
                 {"max_new_tokens": 3, "temperature": 0.7},
@@ -328,7 +362,8 @@ class RunChatTests(unittest.TestCase):
         self.assertIn("chiedi chiarimenti", calls[0][0])
         self.assertIn("test non eseguiti", calls[0][0])
         self.assertIn("Scrivi una funzione Python.", calls[0][0])
-        self.assertEqual(calls[1][0], "Grazie")
+        self.assertIn("Richiesta dell'utente: Grazie", calls[1][0])
+        self.assertIn("rispondi in italiano", calls[1][0])
         self.assertEqual(
             calls[1][1][0],
             ("Scrivi una funzione Python.", "Risposta."),
@@ -394,7 +429,9 @@ class RunChatTests(unittest.TestCase):
             [
                 "Istruzioni permanenti del progetto da Genesis.md:\n"
                 "Usa Python 3.11.\n\nScrivi test.\n\n"
-                "Richiesta dell'utente: Grazie"
+                "Richiesta dell'utente: Grazie\n\n"
+                "Istruzione per la lingua: rispondi in italiano, la stessa "
+                "lingua del messaggio dell'utente."
             ],
         )
         self.assertEqual(

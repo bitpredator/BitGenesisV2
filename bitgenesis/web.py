@@ -13,8 +13,9 @@ from urllib.parse import urlsplit
 import webbrowser
 
 from bitgenesis.agents import (
-    AGENT_INSTRUCTIONS,
     AgentName,
+    build_response_prompt,
+    local_user_rule,
     simple_greeting,
     self_introduction,
 )
@@ -26,11 +27,11 @@ from bitgenesis.effort import (
     is_effort_level,
 )
 from bitgenesis.genesis import read_instructions, update_instructions
+from bitgenesis.language import detect_language
 
 if TYPE_CHECKING:
     from bitgenesis.generate import ConversationChat
 
-_LOCAL_USER_NAME = "Utente"
 _MAX_REQUEST_BYTES = 64 * 1024
 _MAX_LOG_CHARS = 20_000
 
@@ -132,7 +133,13 @@ class WebApplication:
             raise WebRequestError(400, "Profilo non valido.")
 
         selected_agent = cast(AgentName, agent)
-        introduction = self_introduction(message.strip(), selected_agent)
+        clean_message = message.strip()
+        language = detect_language(clean_message)
+        introduction = self_introduction(
+            clean_message,
+            selected_agent,
+            language,
+        )
         if introduction is not None:
             with self.lock:
                 self.history.append((message.strip(), introduction))
@@ -154,7 +161,7 @@ class WebApplication:
                     "per creare un modello conversazionale.",
                 )
 
-            greeting = simple_greeting(message.strip(), selected_agent)
+            greeting = simple_greeting(clean_message, selected_agent, language)
             if greeting is not None:
                 self.history.append((message.strip(), greeting))
                 return {
@@ -182,23 +189,11 @@ class WebApplication:
                     500, f"Impossibile caricare il modello locale: {error}"
                 ) from error
 
-            clean_message = message.strip()
-            prompt_sections = []
-            if agent == "coding":
-                prompt_sections.append(
-                    "Istruzioni per l'agente coding:\n"
-                    f"{AGENT_INSTRUCTIONS['coding']}"
-                )
-            if project_instructions:
-                prompt_sections.append(
-                    "Istruzioni permanenti del progetto da Genesis.md:\n"
-                    f"{project_instructions}"
-                )
-            prompt = (
-                "\n\n".join(prompt_sections)
-                + f"\n\nRichiesta dell'utente: {clean_message}"
-                if prompt_sections
-                else clean_message
+            prompt = build_response_prompt(
+                clean_message,
+                selected_agent,
+                project_instructions,
+                language,
             )
             selected_effort = choose_effort(clean_message, cast(EffortLevel, effort))
             token_budget = effort_token_budget(
@@ -207,11 +202,7 @@ class WebApplication:
             )
             chat_history = [
                 *self.history,
-                (
-                    f"Regola per questa chat locale: chiama l'utente "
-                    f"{_LOCAL_USER_NAME}.",
-                    f"In questa chat locale chiamerò l'utente {_LOCAL_USER_NAME}.",
-                ),
+                local_user_rule(language),
             ]
             try:
                 response = self.chat.reply(

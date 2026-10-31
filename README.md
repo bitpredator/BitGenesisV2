@@ -9,8 +9,8 @@ This repository is the starting point for building the project. Its features, te
 BitGenesis is planned with these goals:
 
 - Start as a Python project compatible with Windows.
-- Focus on Italian while adding English training examples; generated responses
-  remain experimental and are not guaranteed to be reliable in either language.
+- Support Italian and English input, replying in the detected language and
+  using English when the language is unclear; responses remain experimental.
 - Develop and train its own model from scratch, running locally without externally hosted AI services.
 - Eventually become a Windows application.
 
@@ -48,10 +48,13 @@ With Python 3.11 or newer, start BitGenesis from the repository root:
 python -m bitgenesis
 ```
 
-The initial interface accepts Italian text and exits when you type `esci` (or
-`exit`, `quit`, or `uscita`). After you train a conversation model, it loads
-the local checkpoint and tokenizer, uses previous turns in the current session
-as context, and generates replies. Type `/compact` to preview a locally
+The interface recognizes Italian and English messages and asks the model to
+reply in the same language. If a message is too short or its language is not
+recognized, it uses English. This is a lightweight language heuristic, so
+verify the response language when needed. The chat exits when you type `esci`
+(or `exit`, `quit`, or `uscita`). After you train a conversation model, it
+loads the local checkpoint and tokenizer, uses previous turns in the current
+session as context, and generates replies. Type `/compact` to preview a locally
 generated summary of older turns; it replaces the in-memory history only after
 you confirm. Choose generation effort with `/impegno auto|minimo|medio|alto`;
 the `--effort` option sets the starting level. Without a trained conversation
@@ -80,10 +83,10 @@ context; BitGenesis changes it only through these explicit commands, not by
 guessing from ordinary conversation. The experimental model may not reliably
 follow the instructions.
 
-In local mode BitGenesis always addresses the person using it as `Utente`;
-there is no local nickname setting. Choosing a personal nickname is reserved
-for a future official server, where it can be associated with a verified
-account.
+In local mode BitGenesis addresses the person using it as `Utente` in Italian
+and `User` in English; there is no local nickname setting. Choosing a personal
+nickname is reserved for a future official server, where it can be associated
+with a verified account.
 
 ## Use the local web interface
 
@@ -142,7 +145,8 @@ The five included conversation datasets have English counterparts ending in
 conversation training loads all JSONL files under `data/datasets/`, so it
 includes both languages. This adds bilingual training examples but does not
 guarantee that the experimental model will consistently understand or answer
-in either language. Italian remains the configured default language.
+in either language. The configuration still specifies Italian as its default;
+chat replies follow message-language detection and use English when unclear.
 
 ## Learn Python programming
 
