@@ -139,6 +139,8 @@ class WebInterfaceTests(unittest.TestCase):
         chat_class.assert_called_once_with(self.model_path, self.tokenizer_path)
         call = chat_class.return_value.reply.call_args
         self.assertIn("Istruzioni per l'agente coding", call.args[0])
+        self.assertIn("chiedi chiarimenti", call.args[0])
+        self.assertIn("test non eseguiti", call.args[0])
         self.assertEqual(call.kwargs["max_new_tokens"], 160)
 
     def test_saves_and_reads_project_instructions(self) -> None:

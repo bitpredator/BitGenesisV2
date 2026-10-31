@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, cast
 from urllib.parse import urlsplit
 import webbrowser
 
+from bitgenesis.agents import AGENT_INSTRUCTIONS
 from bitgenesis.config import Config
 from bitgenesis.effort import (
     EffortLevel,
@@ -25,14 +26,6 @@ if TYPE_CHECKING:
     from bitgenesis.generate import ConversationChat
 
 _LOCAL_USER_NAME = "Utente"
-_AGENT_INSTRUCTIONS = {
-    "coding": (
-        "Sei l'agente coding di BitGenesis. Aiuta a comprendere, scrivere, "
-        "correggere e testare codice. Spiega le decisioni in modo pratico, "
-        "segnala le ipotesi e non affermare di aver eseguito codice o test "
-        "che non sono stati eseguiti."
-    ),
-}
 _MAX_REQUEST_BYTES = 64 * 1024
 _MAX_LOG_CHARS = 20_000
 
@@ -169,7 +162,7 @@ class WebApplication:
             if agent == "coding":
                 prompt_sections.append(
                     "Istruzioni per l'agente coding:\n"
-                    f"{_AGENT_INSTRUCTIONS['coding']}"
+                    f"{AGENT_INSTRUCTIONS['coding']}"
                 )
             if project_instructions:
                 prompt_sections.append(

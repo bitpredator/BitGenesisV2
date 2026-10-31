@@ -247,6 +247,8 @@ class RunChatTests(unittest.TestCase):
             output,
         )
         self.assertIn("Istruzioni per l'agente coding:", calls[0][0])
+        self.assertIn("chiedi chiarimenti", calls[0][0])
+        self.assertIn("test non eseguiti", calls[0][0])
         self.assertIn("Scrivi una funzione Python.", calls[0][0])
         self.assertEqual(calls[1][0], "Ciao")
         self.assertEqual(

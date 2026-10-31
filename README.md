@@ -63,6 +63,9 @@ testing code, while the chat profile is for general conversation. Both
 profiles share the same local model, conversation history, and `Genesis.md`
 instructions; they are not separately trained models, and their capabilities
 depend on the training data.
+For programming requests, Coding follows the project's existing conventions,
+prefers focused changes, asks for essential missing requirements, and is
+expected to be explicit about assumptions and tests it has not run.
 
 Project instructions can be stored in `Genesis.md` in the directory where
 BitGenesis is started. Use `/genesis aggiungi <testo>` to append instructions,

@@ -4,8 +4,8 @@ from collections.abc import Callable, Sequence
 import argparse
 import math
 from pathlib import Path
-from typing import Literal
 
+from bitgenesis.agents import AGENT_INSTRUCTIONS, AgentName
 from bitgenesis.config import load_config
 from bitgenesis.effort import (
     EFFORT_LEVELS,
@@ -24,19 +24,6 @@ from bitgenesis.generate import (
 _EXIT_COMMANDS = {"esci", "exit", "quit", "uscita"}
 _BANNER_WIDTH = 52
 _LOCAL_USER_NAME = "Utente"
-AgentName = Literal["chat", "coding"]
-_AGENT_INSTRUCTIONS: dict[AgentName, str] = {
-    "chat": (
-        "Sei l'agente chat di BitGenesis. Aiuta l'utente con domande e "
-        "conversazioni generali in modo chiaro e conciso."
-    ),
-    "coding": (
-        "Sei l'agente coding di BitGenesis. Aiuta a comprendere, scrivere, "
-        "correggere e testare codice. Spiega le decisioni in modo pratico, "
-        "segnala le ipotesi e non affermare di aver eseguito codice o test "
-        "che non sono stati eseguiti."
-    ),
-}
 
 
 def _write_welcome(
@@ -285,7 +272,7 @@ def run_chat(
             if current_agent == "coding":
                 prompt_sections.append(
                     "Istruzioni per l'agente coding:\n"
-                    f"{_AGENT_INSTRUCTIONS[current_agent]}"
+                    f"{AGENT_INSTRUCTIONS[current_agent]}"
                 )
             if project_instructions:
                 prompt_sections.append(
