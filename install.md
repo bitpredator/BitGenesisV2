@@ -15,12 +15,15 @@ and generation require the optional PyTorch dependency.
 | GPU | Not currently used by the training command, which selects the CPU |
 | RAM and free disk space | No minimum has been measured or published |
 
-The model is initialized from random weights and runs locally. Training time
-and memory use depend on the dataset and on settings such as context length,
-batch size, and model dimensions in `config.toml`. The current default model is
-small, but this alone is not enough to promise a minimum hardware
-configuration. Hardware recommendations will be added after repeatable
-measurements on documented datasets and settings.
+The model is initialized from random weights and runs locally. The included
+conversation data contains original Italian examples for general responses and
+Python programming, but is still small; training it is not expected to produce
+a reliable general assistant. Training time and memory use depend on the
+dataset and on settings such as context length, batch size, and model
+dimensions in `config.toml`. The current default model is small, but this alone
+is not enough to promise a minimum hardware configuration. Hardware
+recommendations will be added after repeatable measurements on documented
+datasets and settings.
 
 ## Set up the project
 

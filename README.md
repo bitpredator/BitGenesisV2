@@ -141,8 +141,13 @@ practical topics: variables and expressions, conditionals, loops, lists,
 dictionaries, functions, type annotations, exceptions, files and JSON,
 modules, virtual environments, classes, readable code, and `unittest`.
 The examples target the project's Python 3.11+ baseline and are original
-learning material, not a substitute for reviewing and running code. Train
-them together with the other included conversation examples:
+learning material, not a substitute for reviewing and running code. The
+general Italian conversation corpus also includes examples for clarification,
+concise explanations, faithful summaries, and acknowledging uncertainty.
+These original examples broaden training coverage but do not make the small
+from-scratch model a reliable general assistant. Review the expanded default
+prompt set with `python -m bitgenesis.evaluate` after training. Train the
+lessons together with the other included conversation examples:
 
 ```console
 python -m bitgenesis.train --data-format conversations --steps 1000
