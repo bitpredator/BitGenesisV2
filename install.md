@@ -203,12 +203,15 @@ validation conversations are not used to train it. At least two distinct
 conversations are required for a non-empty validation split. Both splits must
 contain more tokens than the configured context length (128 by default).
 
-The included `data\datasets\programmazione_python_basi.jsonl` is a small Italian
-pilot curriculum covering `print()`, variables, basic arithmetic, f-strings,
-and guided exercises. It is included in the default conversation training data.
+The included `data\datasets\programmazione_python_basi.jsonl` and
+`data\datasets\programmazione_python_pratica.jsonl` provide Italian lessons
+from introductory syntax to practical topics: conditions, loops, collections,
+functions, type annotations, exceptions, files, JSON, modules, virtual
+environments, classes, and tests. They are included automatically when training
+on the default conversation corpus. The examples target Python 3.11 or newer.
 After training, use `data\evaluation\programming_prompts.jsonl` to review
-programming answers with the evaluation command; the criteria require manual
-review and do not prove that generated code is correct.
+answers across these topics; criteria support manual review and do not prove
+generated code is correct.
 
 Plain UTF-8 `.txt` documents remain supported as an alternative. Select the
 input format explicitly using `--data-format text` or

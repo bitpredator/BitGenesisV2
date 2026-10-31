@@ -46,7 +46,7 @@ class LoadEvaluationCasesTests(unittest.TestCase):
             ["minimo", "medio", "alto", "alto"],
         )
 
-    def test_loads_programming_basics_evaluation_cases(self) -> None:
+    def test_loads_python_programming_evaluation_cases(self) -> None:
         path = (
             Path(__file__).resolve().parents[1]
             / "data"
@@ -56,8 +56,9 @@ class LoadEvaluationCasesTests(unittest.TestCase):
 
         cases = load_evaluation_cases(path)
 
-        self.assertEqual(len(cases), 4)
+        self.assertEqual(len(cases), 14)
         self.assertIn("python-print", {case.id for case in cases})
+        self.assertIn("python-unittest", {case.id for case in cases})
         self.assertTrue(all(case.criteria for case in cases))
 
     def test_rejects_duplicate_ids_and_malformed_json(self) -> None:

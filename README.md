@@ -130,13 +130,15 @@ The JSONL report records each response, selected level, generated token count,
 and generation time. Review response quality manually using the criteria in
 the report; timing and length alone do not measure correctness.
 
-## Learn Python programming basics
+## Learn Python programming
 
-The included conversation corpus now contains a small Italian pilot lesson on
-`print()`, variables, strings and numbers, arithmetic, f-strings, common
-mistakes, and guided exercises. Train it together with the other included
-conversation examples, including a reference to the interactive and
-command-line BitGenesis commands:
+The included Italian conversation lessons cover introductory Python and
+practical topics: variables and expressions, conditionals, loops, lists,
+dictionaries, functions, type annotations, exceptions, files and JSON,
+modules, virtual environments, classes, readable code, and `unittest`.
+The examples target the project's Python 3.11+ baseline and are original
+learning material, not a substitute for reviewing and running code. Train
+them together with the other included conversation examples:
 
 ```console
 python -m bitgenesis.train --data-format conversations --steps 1000
@@ -156,8 +158,8 @@ prefers the resumable checkpoint and falls back to `bitgenesis.pt`. Older
 model-only checkpoints can be used as a starting point with `--resume-from`,
 but resume with a fresh optimizer and step count.
 
-After training, evaluate basic programming explanations with the separate
-prompt set:
+After training, review programming explanations across the covered topics
+with the separate prompt set:
 
 ```console
 python -m bitgenesis.evaluate --cases data/evaluation/programming_prompts.jsonl --output data/models/programming_results.jsonl

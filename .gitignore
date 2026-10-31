@@ -27,6 +27,7 @@ credentials*.json
 data/datasets/*
 !data/datasets/esempi_sintetici.jsonl
 !data/datasets/programmazione_python_basi.jsonl
+!data/datasets/programmazione_python_pratica.jsonl
 !data/datasets/comandi_bitgenesis.jsonl
 data/models/
 NEXT_STEPS.md
