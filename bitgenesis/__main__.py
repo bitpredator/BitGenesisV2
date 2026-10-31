@@ -5,7 +5,12 @@ import argparse
 import math
 from pathlib import Path
 
-from bitgenesis.agents import AGENT_INSTRUCTIONS, AgentName
+from bitgenesis.agents import (
+    AGENT_INSTRUCTIONS,
+    AgentName,
+    self_introduction,
+    simple_greeting,
+)
 from bitgenesis.config import load_config
 from bitgenesis.effort import (
     EFFORT_LEVELS,
@@ -237,6 +242,11 @@ def run_chat(
                 )
             continue
         if message.strip():
+            introduction = self_introduction(message, current_agent)
+            if introduction is not None:
+                write_output(f"  BitGenesis > {introduction}")
+                history.append((message.strip(), introduction))
+                continue
             if model_path is None or tokenizer_path is None:
                 write_output(
                     "  BitGenesis > Modello non disponibile. Addestrami prima con "
@@ -248,6 +258,11 @@ def run_chat(
                     "  BitGenesis > Modello non disponibile. Addestrami prima con "
                     "'python -m bitgenesis.train --data-format conversations'."
                 )
+                continue
+            greeting = simple_greeting(message.strip(), current_agent)
+            if greeting is not None:
+                write_output(f"  BitGenesis > {greeting}")
+                history.append((message.strip(), greeting))
                 continue
             if chat is None:
                 chat = ConversationChat(model_path, tokenizer_path)

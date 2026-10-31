@@ -386,6 +386,7 @@ class TrainingTests(unittest.TestCase):
             tokenizer, [validation_conversation] * 4
         )
         model = make_model(tokenizer.vocab_size)
+        evaluations: list[tuple[int, dict[str, float]]] = []
 
         history = train_model(
             model,
@@ -398,6 +399,9 @@ class TrainingTests(unittest.TestCase):
             seed=7,
             train_target_mask=train_target_mask,
             validation_target_mask=validation_target_mask,
+            evaluation_callback=lambda step, _model, losses: evaluations.append(
+                (step, dict(losses))
+            ),
         )
         model.training_format = "conversations"
 
@@ -407,6 +411,16 @@ class TrainingTests(unittest.TestCase):
         )
         self.assertTrue(
             all(torch.isfinite(torch.tensor(item["validation"])) for item in history)
+        )
+        self.assertEqual(
+            evaluations,
+            [
+                (
+                    int(item["step"]),
+                    {key: item[key] for key in ("train", "validation")},
+                )
+                for item in history
+            ],
         )
 
         with tempfile.TemporaryDirectory() as temp_dir:

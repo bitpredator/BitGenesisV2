@@ -117,6 +117,43 @@ class WebInterfaceTests(unittest.TestCase):
         self.assertIn("Modello non disponibile", response["error"])
         chat_class.assert_not_called()
 
+    def test_self_introduction_works_without_a_trained_model(self) -> None:
+        with patch("bitgenesis.generate.ConversationChat") as chat_class:
+            status, response = self.request(
+                "POST",
+                "/api/chat",
+                {"message": "Presentati.", "effort": "auto", "agent": "chat"},
+                origin=f"http://127.0.0.1:{self.server.server_port}",
+            )
+
+        self.assertEqual(status, 200)
+        self.assertFalse(response["generated"])
+        self.assertIn("Sono BitGenesis", response["response"])
+        self.assertEqual(response["effort"], "non applicato")
+        self.assertEqual(len(self.app.history), 1)
+        chat_class.assert_not_called()
+
+    def test_standalone_greeting_gets_a_deterministic_reply(self) -> None:
+        self.model_path.parent.mkdir(parents=True)
+        self.model_path.touch()
+        self.tokenizer_path.touch()
+        with patch("bitgenesis.generate.ConversationChat") as chat_class:
+            status, response = self.request(
+                "POST",
+                "/api/chat",
+                {"message": "Ciao", "effort": "alto", "agent": "chat"},
+                origin=f"http://127.0.0.1:{self.server.server_port}",
+            )
+
+        self.assertEqual(status, 200)
+        self.assertFalse(response["generated"])
+        self.assertEqual(
+            response["response"],
+            "Ciao! Sono BitGenesis. Come posso aiutarti?",
+        )
+        self.assertEqual(response["effort"], "non applicato")
+        chat_class.assert_not_called()
+
     def test_chat_uses_local_model_and_selected_profile(self) -> None:
         self.model_path.parent.mkdir(parents=True)
         self.model_path.touch()
@@ -135,7 +172,10 @@ class WebInterfaceTests(unittest.TestCase):
             )
 
         self.assertEqual(status, 200)
-        self.assertEqual(response, {"response": "Ciao, Utente!", "effort": "alto"})
+        self.assertEqual(
+            response,
+            {"response": "Ciao, Utente!", "effort": "alto", "generated": True},
+        )
         chat_class.assert_called_once_with(self.model_path, self.tokenizer_path)
         call = chat_class.return_value.reply.call_args
         self.assertIn("Istruzioni per l'agente coding", call.args[0])

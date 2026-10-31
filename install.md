@@ -161,7 +161,12 @@ The chat starts with the general `chat` profile. Switch profiles with
 `/agente chat` or `/agente coding`; `/agente` displays the active profile. The
 coding profile guides responses toward coding tasks, but both profiles use the
 same checkpoint and share conversation history and `Genesis.md` instructions.
-They do not represent separately trained models. For programming requests,
+They do not represent separately trained models. Explicit requests for a
+self-introduction and standalone greetings such as `Ciao` receive short
+informational responses without model generation. Other messages use the
+trained model. For programming requests, Coding follows project conventions,
+favors focused changes, asks about essential missing requirements, and
+distinguishes executed tests from suggested or unrun tests. For programming requests,
 Coding follows project conventions, favors focused changes, asks about
 essential missing requirements, and distinguishes executed tests from
 suggested or unrun tests.
@@ -243,9 +248,12 @@ keep. A resumable checkpoint, including the optimizer and random-number
 generator states, is periodically saved to
 `data\models\bitgenesis_training.pt`; the default interval is 100 steps and
 `--checkpoint-interval` changes it. The final inference checkpoint remains
-`data\models\bitgenesis.pt`. If interrupted, the latest periodic checkpoint
-limits lost work to at most one checkpoint interval; before the first
-checkpoint is written, there is nothing to resume yet.
+`data\models\bitgenesis.pt`. Training also saves
+`data\models\bitgenesis_best.pt` when validation loss improves and selects it
+for inference; the metrics report records the selected step and loss. If
+interrupted, the latest periodic checkpoint limits lost work to at most one
+checkpoint interval; before the first checkpoint is written, there is nothing
+to resume yet.
 
 To resume the default checkpoint and train until a total of 2000 steps:
 

@@ -6,7 +6,11 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+import torch
+
 from bitgenesis.config import load_config
+from bitgenesis.tokenizer import BPETokenizer
+from bitgenesis.training import load_checkpoint
 from bitgenesis.train import main
 
 
@@ -167,8 +171,32 @@ class TrainCommandTests(unittest.TestCase):
             self.assertEqual(len(report["history"]), 1)
             self.assertEqual(report["history"][0]["step"], 1.0)
             self.assertTrue((output_dir / "bitgenesis.pt").is_file())
+            self.assertTrue((output_dir / "bitgenesis_best.pt").is_file())
             self.assertTrue((output_dir / "bitgenesis_training.pt").is_file())
             self.assertTrue((output_dir / "tokenizer.json").is_file())
+            self.assertEqual(
+                report["configuration"]["selected_model_step"],
+                1,
+            )
+            self.assertEqual(
+                report["configuration"]["selected_model_validation_loss"],
+                report["history"][0]["validation"],
+            )
+            tokenizer = BPETokenizer.load(output_dir / "tokenizer.json")
+            inference_model = load_checkpoint(
+                output_dir / "bitgenesis.pt",
+                tokenizer=tokenizer,
+            )
+            best_model = load_checkpoint(
+                output_dir / "bitgenesis_best.pt",
+                tokenizer=tokenizer,
+            )
+            for inference_parameter, best_parameter in zip(
+                inference_model.parameters(),
+                best_model.parameters(),
+                strict=True,
+            ):
+                self.assertTrue(torch.equal(inference_parameter, best_parameter))
             warning = warnings.getvalue()
             self.assertIn("1 gruppo di duplicati esatti", warning)
             self.assertIn("examples.jsonl:1", warning)

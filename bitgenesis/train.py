@@ -25,6 +25,7 @@ from bitgenesis.training import (
     encode_conversations,
     encode_documents,
     fingerprint_training_data,
+    load_checkpoint,
     load_training_checkpoint,
     save_checkpoint,
     save_training_report,
@@ -151,6 +152,7 @@ def main(argv: Sequence[str] | None = None) -> None:
 
     output_dir = Path(args.output_dir)
     checkpoint_path = output_dir / "bitgenesis.pt"
+    best_checkpoint_path = output_dir / "bitgenesis_best.pt"
     training_checkpoint_path = output_dir / "bitgenesis_training.pt"
     if args.resume_from is not None:
         resume_path = args.resume_from
@@ -312,6 +314,41 @@ def main(argv: Sequence[str] | None = None) -> None:
             ),
         )
 
+    best_validation_loss = math.inf
+    best_model_step: int | None = None
+    if training_state is not None and best_checkpoint_path.is_file():
+        best_validation_record = min(
+            training_state.history,
+            key=lambda result: result["validation"],
+            default=None,
+        )
+        if best_validation_record is not None:
+            best_validation_loss = best_validation_record["validation"]
+            best_model_step = int(best_validation_record["step"])
+        best_model = load_checkpoint(
+            best_checkpoint_path,
+            device="cpu",
+            tokenizer=tokenizer,
+        )
+        if (
+            best_model.config != model_config
+            or best_model.training_format != args.data_format
+        ):
+            parser.error("Best checkpoint settings do not match this training run.")
+
+    def save_best_model(
+        step: int,
+        checkpoint_model: BitGenesisLM,
+        losses: dict[str, float],
+    ) -> None:
+        nonlocal best_validation_loss, best_model_step
+        validation_loss = losses["validation"]
+        if validation_loss >= best_validation_loss:
+            return
+        save_checkpoint(checkpoint_model, best_checkpoint_path, tokenizer)
+        best_validation_loss = validation_loss
+        best_model_step = step
+
     history = train_model(
         model,
         train_tokens,
@@ -338,10 +375,18 @@ def main(argv: Sequence[str] | None = None) -> None:
         ),
         checkpoint_interval=args.checkpoint_interval,
         checkpoint_callback=save_progress,
+        evaluation_callback=save_best_model,
     )
 
-    save_checkpoint(model, checkpoint_path, tokenizer)
+    if best_model_step is None:
+        raise RuntimeError("Training completed without a validation checkpoint.")
     tokenizer.save(tokenizer_path)
+    best_model = load_checkpoint(
+        best_checkpoint_path,
+        device="cpu",
+        tokenizer=tokenizer,
+    )
+    save_checkpoint(best_model, checkpoint_path, tokenizer)
     save_training_report(
         metrics_path,
         configuration={
@@ -362,11 +407,18 @@ def main(argv: Sequence[str] | None = None) -> None:
             "seed": args.seed,
             "generate_tokens": args.generate_tokens,
             "temperature": args.temperature,
+            "selected_model_step": best_model_step,
+            "selected_model_validation_loss": best_validation_loss,
         },
         history=history,
     )
 
     print(f"Modello salvato in: {checkpoint_path}")
+    print(
+        f"Checkpoint con la migliore validazione salvato in: "
+        f"{best_checkpoint_path} (passo {best_model_step}, "
+        f"perdita {best_validation_loss:.4f})"
+    )
     print(f"Tokenizer salvato in: {tokenizer_path}")
     print(f"Metriche di training salvate in: {metrics_path}")
     for result in history:
@@ -378,7 +430,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     if args.prompt:
         if args.data_format == "conversations":
             generated_text = generate_from_model(
-                model,
+                best_model,
                 tokenizer,
                 args.prompt,
                 max_new_tokens=args.generate_tokens,

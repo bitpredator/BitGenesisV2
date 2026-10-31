@@ -151,7 +151,10 @@
             agent: document.querySelector("#agent").value,
           }),
         });
-        addMessage("assistant", result.response, `BitGenesis · impegno ${result.effort}`);
+        const label = result.generated
+          ? `BitGenesis · impegno ${result.effort}`
+          : "BitGenesis · risposta informativa";
+        addMessage("assistant", result.response, label);
       } catch (error) {
         chatError.textContent = error.message;
       } finally {

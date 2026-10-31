@@ -63,6 +63,10 @@ testing code, while the chat profile is for general conversation. Both
 profiles share the same local model, conversation history, and `Genesis.md`
 instructions; they are not separately trained models, and their capabilities
 depend on the training data.
+For explicit requests to introduce itself or describe its capabilities, both
+interfaces use a short factual response instead of the experimental model.
+Standalone greetings such as `Ciao` also get a short, deterministic response;
+other requests continue to use the trained model.
 For programming requests, Coding follows the project's existing conventions,
 prefers focused changes, asks for essential missing requirements, and is
 expected to be explicit about assumptions and tests it has not run.
@@ -146,7 +150,10 @@ python -m bitgenesis.train --data-format conversations --steps 1000
 
 Training periodically saves a resumable checkpoint to
 `data/models/bitgenesis_training.pt`; adjust the frequency with
-`--checkpoint-interval`. To continue up to a total of 2000 steps, run:
+`--checkpoint-interval`. It also saves `bitgenesis_best.pt` whenever the
+measured validation loss improves and uses that best-validation checkpoint
+for inference as `bitgenesis.pt`. The metrics report records the selected
+step and validation loss. To continue up to a total of 2000 steps, run:
 
 ```console
 python -m bitgenesis.train --data-format conversations --steps 2000 --resume

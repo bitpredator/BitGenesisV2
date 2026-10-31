@@ -12,7 +12,12 @@ from typing import TYPE_CHECKING, cast
 from urllib.parse import urlsplit
 import webbrowser
 
-from bitgenesis.agents import AGENT_INSTRUCTIONS
+from bitgenesis.agents import (
+    AGENT_INSTRUCTIONS,
+    AgentName,
+    simple_greeting,
+    self_introduction,
+)
 from bitgenesis.config import Config
 from bitgenesis.effort import (
     EffortLevel,
@@ -113,7 +118,7 @@ class WebApplication:
         with self.lock:
             self.history.clear()
 
-    def reply(self, body: dict[str, object]) -> dict[str, str]:
+    def reply(self, body: dict[str, object]) -> dict[str, object]:
         message = body.get("message")
         effort = body.get("effort", self.effort)
         agent = body.get("agent", "chat")
@@ -126,6 +131,17 @@ class WebApplication:
         if not isinstance(agent, str) or agent not in {"chat", "coding"}:
             raise WebRequestError(400, "Profilo non valido.")
 
+        selected_agent = cast(AgentName, agent)
+        introduction = self_introduction(message.strip(), selected_agent)
+        if introduction is not None:
+            with self.lock:
+                self.history.append((message.strip(), introduction))
+            return {
+                "response": introduction,
+                "effort": "non applicato",
+                "generated": False,
+            }
+
         with self.lock:
             if self.training_status == "running":
                 raise WebRequestError(
@@ -137,6 +153,15 @@ class WebApplication:
                     "Modello non disponibile. Usa il pannello Addestramento "
                     "per creare un modello conversazionale.",
                 )
+
+            greeting = simple_greeting(message.strip(), selected_agent)
+            if greeting is not None:
+                self.history.append((message.strip(), greeting))
+                return {
+                    "response": greeting,
+                    "effort": "non applicato",
+                    "generated": False,
+                }
 
             try:
                 from bitgenesis.generate import (
@@ -206,6 +231,7 @@ class WebApplication:
             return {
                 "response": response or "[risposta vuota]",
                 "effort": selected_effort,
+                "generated": True,
             }
 
     def start_training(self, body: dict[str, object]) -> dict[str, str]:

@@ -37,6 +37,7 @@ CheckpointCallback = Callable[
     ],
     None,
 ]
+EvaluationCallback = Callable[[int, BitGenesisLM, dict[str, float]], None]
 
 
 def encode_documents(tokenizer: BPETokenizer, documents: Sequence[str]) -> Tensor:
@@ -225,6 +226,7 @@ def train_model(
     initial_history: Sequence[dict[str, float]] = (),
     checkpoint_interval: int = 100,
     checkpoint_callback: CheckpointCallback | None = None,
+    evaluation_callback: EvaluationCallback | None = None,
 ) -> list[dict[str, float]]:
     """Train or resume a model and return its complete loss history."""
     for name, value in (
@@ -289,6 +291,8 @@ def train_model(
             )
             record = {"step": float(step), **measured_losses}
             history.append(record)
+            if evaluation_callback is not None:
+                evaluation_callback(step, model, measured_losses)
         if checkpoint_callback is not None and (
             step % checkpoint_interval == 0 or step == steps
         ):

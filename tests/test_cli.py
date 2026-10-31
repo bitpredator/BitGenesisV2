@@ -53,8 +53,86 @@ class RunChatTests(unittest.TestCase):
         )
         self.assertEqual(output[-1], "  BitGenesis > A presto!")
 
+    def test_self_introduction_works_without_a_trained_model(self) -> None:
+        messages = iter(["Presentati.", "esci"])
+        output: list[str] = []
+
+        with patch("bitgenesis.__main__.ConversationChat") as chat_class:
+            run_chat(
+                input_fn=lambda _prompt: next(messages),
+                output_fn=output.append,
+                model_path=Path("missing/model.pt"),
+                tokenizer_path=Path("missing/tokenizer.json"),
+            )
+
+        self.assertTrue(any("Sono BitGenesis" in line for line in output))
+        self.assertTrue(
+            any("le mie risposte possono essere imprecise" in line for line in output)
+        )
+        self.assertFalse(any("Impegno:" in line for line in output))
+        chat_class.assert_not_called()
+
+    def test_coding_self_introduction_describes_its_limits(self) -> None:
+        messages = iter(["/agente coding", "Chi sei?", "esci"])
+        output: list[str] = []
+
+        with patch("bitgenesis.__main__.ConversationChat") as chat_class:
+            run_chat(
+                input_fn=lambda _prompt: next(messages),
+                output_fn=output.append,
+                model_path=Path("missing/model.pt"),
+                tokenizer_path=Path("missing/tokenizer.json"),
+            )
+
+        self.assertTrue(any("profilo Coding" in line for line in output))
+        self.assertTrue(
+            any("Non eseguo programmi o test" in line for line in output)
+        )
+        chat_class.assert_not_called()
+
+    def test_standalone_greeting_gets_a_deterministic_reply(self) -> None:
+        messages = iter(["Ciao", "esci"])
+        output: list[str] = []
+
+        with (
+            patch.object(Path, "is_file", return_value=True),
+            patch("bitgenesis.__main__.ConversationChat") as chat_class,
+        ):
+            run_chat(
+                input_fn=lambda _prompt: next(messages),
+                output_fn=output.append,
+                model_path=Path("model.pt"),
+                tokenizer_path=Path("tokenizer.json"),
+            )
+
+        self.assertIn(
+            "  BitGenesis > Ciao! Sono BitGenesis. Come posso aiutarti?",
+            output,
+        )
+        self.assertFalse(any("Impegno:" in line for line in output))
+        chat_class.assert_not_called()
+
+    def test_greeting_with_a_follow_up_question_still_uses_the_model(self) -> None:
+        messages = iter(["Ciao, come puoi aiutarmi?", "esci"])
+        output: list[str] = []
+
+        with (
+            patch.object(Path, "is_file", return_value=True),
+            patch("bitgenesis.__main__.ConversationChat") as chat_class,
+        ):
+            chat_class.return_value.reply.return_value = "Risposta del modello."
+            run_chat(
+                input_fn=lambda _prompt: next(messages),
+                output_fn=output.append,
+                model_path=Path("model.pt"),
+                tokenizer_path=Path("tokenizer.json"),
+            )
+
+        chat_class.assert_called_once_with(Path("model.pt"), Path("tokenizer.json"))
+        self.assertIn("  BitGenesis > Risposta del modello.", output)
+
     def test_generates_replies_using_local_model_paths(self) -> None:
-        messages = iter([" Ciao! ", "esci"])
+        messages = iter([" Ciao, BitGenesis! ", "esci"])
         output: list[str] = []
         model_path = Path("models/bitgenesis.pt")
         tokenizer_path = Path("models/tokenizer.json")
@@ -84,7 +162,7 @@ class RunChatTests(unittest.TestCase):
             )
             chat_class.assert_called_once_with(model_path, tokenizer_path)
             chat.reply.assert_called_once()
-            self.assertEqual(chat.reply.call_args.args[0], "Ciao!")
+            self.assertEqual(chat.reply.call_args.args[0], "Ciao, BitGenesis!")
             self.assertEqual(
                 {key: value for key, value in chat.reply.call_args.kwargs.items()},
                 {"max_new_tokens": 3, "temperature": 0.7},
@@ -101,7 +179,7 @@ class RunChatTests(unittest.TestCase):
         self.assertIn("  BitGenesis > Salve!", output)
 
     def test_passes_previous_turns_as_context_for_next_reply(self) -> None:
-        messages = iter(["Ciao", "Come ti chiami?", "esci"])
+        messages = iter(["Ciao, come stai?", "Come ti chiami?", "esci"])
         output: list[str] = []
         history_snapshots: list[list[tuple[str, str]]] = []
 
@@ -135,12 +213,12 @@ class RunChatTests(unittest.TestCase):
         )
         self.assertEqual(
             history_snapshots,
-            [[local_identity], [("Ciao", "Salve!"), local_identity]],
+            [[local_identity], [("Ciao, come stai?", "Salve!"), local_identity]],
         )
         self.assertIn("  BitGenesis > Sono BitGenesis.", output)
 
     def test_auto_effort_scales_generation_for_request_complexity(self) -> None:
-        messages = iter(["Ciao", "Come stai?", "Spiegami la differenza", "esci"])
+        messages = iter(["Grazie", "Come stai?", "Spiegami la differenza", "esci"])
         output: list[str] = []
 
         with (
@@ -169,7 +247,7 @@ class RunChatTests(unittest.TestCase):
         self.assertTrue(any("alto (automatico)" in line for line in output))
 
     def test_effort_command_changes_and_reports_chat_mode(self) -> None:
-        messages = iter(["/impegno alto", "Ciao", "/impegno", "esci"])
+        messages = iter(["/impegno alto", "Grazie", "/impegno", "esci"])
         output: list[str] = []
 
         with (
@@ -202,7 +280,7 @@ class RunChatTests(unittest.TestCase):
                 "/agente coding",
                 "Scrivi una funzione Python.",
                 "/agente chat",
-                "Ciao",
+                "Grazie",
                 "/agente automatico",
                 "esci",
             ]
@@ -250,7 +328,7 @@ class RunChatTests(unittest.TestCase):
         self.assertIn("chiedi chiarimenti", calls[0][0])
         self.assertIn("test non eseguiti", calls[0][0])
         self.assertIn("Scrivi una funzione Python.", calls[0][0])
-        self.assertEqual(calls[1][0], "Ciao")
+        self.assertEqual(calls[1][0], "Grazie")
         self.assertEqual(
             calls[1][1][0],
             ("Scrivi una funzione Python.", "Risposta."),
@@ -266,7 +344,7 @@ class RunChatTests(unittest.TestCase):
                 "/genesis aggiungi Usa Python 3.11.",
                 "/genesis aggiungi Scrivi test.",
                 "/genesis mostra",
-                "Ciao",
+                "Grazie",
                 "esci",
             ]
         )
@@ -316,7 +394,7 @@ class RunChatTests(unittest.TestCase):
             [
                 "Istruzioni permanenti del progetto da Genesis.md:\n"
                 "Usa Python 3.11.\n\nScrivi test.\n\n"
-                "Richiesta dell'utente: Ciao"
+                "Richiesta dell'utente: Grazie"
             ],
         )
         self.assertEqual(
@@ -376,7 +454,7 @@ class RunChatTests(unittest.TestCase):
         self.assertIn("Modello non disponibile.", "\n".join(output))
 
     def test_local_user_name_is_fixed_in_context(self) -> None:
-        messages = iter(["Ciao", "Come mi chiamo?", "esci"])
+        messages = iter(["Ciao, come stai?", "Come mi chiamo?", "esci"])
         output: list[str] = []
         history_snapshots: list[list[tuple[str, str]]] = []
 
@@ -413,13 +491,13 @@ class RunChatTests(unittest.TestCase):
         self.assertEqual(
             history_snapshots[1],
             [
-                ("Ciao", "Ciao, Utente!"),
+                ("Ciao, come stai?", "Ciao, Utente!"),
                 local_identity,
             ],
         )
 
     def test_compact_previews_summary_and_applies_it_after_confirmation(self) -> None:
-        messages = iter(["Ciao", "Come stai?", "/compact", "s", "E poi?", "esci"])
+        messages = iter(["Ciao, come stai?", "Come stai?", "/compact", "s", "E poi?", "esci"])
         output: list[str] = []
         history_snapshots: list[list[tuple[str, str]]] = []
         compact_snapshots: list[list[tuple[str, str]]] = []
@@ -458,7 +536,7 @@ class RunChatTests(unittest.TestCase):
 
         self.assertEqual(
             compact_snapshots,
-            [[("Ciao", "Salve"), ("Come stai?", "Sto bene")]],
+            [[("Ciao, come stai?", "Salve"), ("Come stai?", "Sto bene")]],
         )
         self.assertEqual(
             history_snapshots[-1],
@@ -476,7 +554,7 @@ class RunChatTests(unittest.TestCase):
         )
 
     def test_compact_cancel_keeps_original_history(self) -> None:
-        messages = iter(["Ciao", "Come stai?", "/compact", "n", "E poi?", "esci"])
+        messages = iter(["Ciao, come stai?", "Come stai?", "/compact", "n", "E poi?", "esci"])
         output: list[str] = []
         history_snapshots: list[list[tuple[str, str]]] = []
 
@@ -512,7 +590,7 @@ class RunChatTests(unittest.TestCase):
         self.assertEqual(
             history_snapshots[-1],
             [
-                ("Ciao", "Salve"),
+                ("Ciao, come stai?", "Salve"),
                 ("Come stai?", "Sto bene"),
                 (
                     "Regola per questa chat locale: chiama l'utente Utente.",
