@@ -85,6 +85,8 @@ Command-line options take precedence over the configuration. For example:
 
 ```powershell
 python -m bitgenesis --max-new-tokens 120 --temperature 0.8 --effort auto
+python -m bitgenesis --web
+python -m bitgenesis --web --port 8766
 python -m bitgenesis.generate --prompt "Ciao" --max-new-tokens 120 --temperature 0.8
 python -m bitgenesis.train --data-format conversations --context-length 96 --embedding-dim 48 --heads 4
 python -m bitgenesis.evaluate --temperature 0.6 --max-new-tokens 120
@@ -128,6 +130,18 @@ Start the terminal interface:
 ```powershell
 python -m bitgenesis
 ```
+
+For a browser-based local interface, run:
+
+```powershell
+python -m bitgenesis --web
+```
+
+The page opens automatically and provides local chat, profile and effort
+controls, project instructions, and conversational model training. The
+interface listens only on `127.0.0.1`; keep the terminal window open while
+using it and press `Ctrl+C` to stop the server. If port 8765 is already in
+use, choose another port with `--port 8766`.
 
 The terminal shows an ASCII welcome banner with the model-file status and
 reminds you that responses are experimental. Type `esci` to exit. After

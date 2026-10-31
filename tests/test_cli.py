@@ -633,6 +633,27 @@ class RunChatTests(unittest.TestCase):
             },
         )
 
+    def test_web_option_starts_the_local_browser_interface(self) -> None:
+        with (
+            patch("bitgenesis.__main__.load_config") as load_config,
+            patch("bitgenesis.web.run_web_server") as run_web_server_mock,
+        ):
+            load_config.return_value.models_dir = Path("local/models")
+            load_config.return_value.generation.max_new_tokens = 20
+            load_config.return_value.generation.temperature = 0.8
+
+            main(["--web", "--port", "8766", "--effort", "alto"])
+
+        run_web_server_mock.assert_called_once_with(
+            config=load_config.return_value,
+            model_path=Path("local/models/bitgenesis.pt"),
+            tokenizer_path=Path("local/models/tokenizer.json"),
+            max_new_tokens=20,
+            temperature=0.8,
+            effort="alto",
+            port=8766,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

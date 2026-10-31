@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#111827">
+  <title>BitGenesis — assistente locale</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <main class="shell">
+    <header>
+      <div>
+        <h1>BitGenesis</h1>
+        <p class="subtitle">Assistente sperimentale, eseguito sul tuo computer.</p>
+      </div>
+      <div class="status" role="status"><span id="status-dot" class="dot"></span><span id="model-status">Controllo modello...</span></div>
+    </header>
+
+    <div class="layout">
+      <aside aria-label="Impostazioni">
+        <section class="section">
+          <h2>Conversazione</h2>
+          <label for="agent">Profilo</label>
+          <select id="agent">
+            <option value="chat">Chat</option>
+            <option value="coding">Coding</option>
+          </select>
+          <label for="effort">Impegno</label>
+          <select id="effort">
+            <option value="auto">Automatico</option>
+            <option value="minimo">Minimo</option>
+            <option value="medio">Medio</option>
+            <option value="alto">Alto</option>
+          </select>
+          <p class="hint">La cronologia resta in memoria solo durante questa sessione.</p>
+          <button id="new-chat" type="button">Nuova conversazione</button>
+        </section>
+
+        <section class="section">
+          <h2>Istruzioni del progetto</h2>
+          <p class="hint">Salvate in Genesis.md nella cartella da cui hai avviato BitGenesis.</p>
+          <label for="instructions-input">Testo da aggiungere o sostituire</label>
+          <textarea id="instructions-input" placeholder="Scrivi le istruzioni da salvare..."></textarea>
+          <div class="button-row">
+            <button id="append-instructions" type="button">Aggiungi</button>
+            <button id="replace-instructions" type="button">Sostituisci</button>
+          </div>
+          <label for="stored-instructions">Istruzioni attuali</label>
+          <pre id="stored-instructions" class="hint">Caricamento...</pre>
+        </section>
+
+        <section class="section">
+          <h2>Addestramento</h2>
+          <p class="hint">Usa i dati conversazionali .jsonl in data/datasets. L’addestramento avviene in locale e può richiedere tempo.</p>
+          <label for="steps">Passi di addestramento</label>
+          <input id="steps" type="number" min="1" max="100000" value="1000">
+          <button id="train" class="primary" type="button">Addestra modello</button>
+          <p id="training-status" class="hint" role="status">Nessun addestramento in corso.</p>
+          <pre id="training-log" aria-live="polite"></pre>
+        </section>
+      </aside>
+
+      <section class="chat-panel" aria-label="Chat BitGenesis">
+        <div class="chat-top">
+          <h2>Chat</h2>
+          <span class="hint">Le risposte possono essere imprecise.</span>
+        </div>
+        <div id="messages" aria-live="polite">
+          <div class="empty">Ciao! Scrivi un messaggio qui sotto.<br>Se non hai ancora un modello, puoi crearlo dal pannello Addestramento.</div>
+        </div>
+        <div class="composer">
+          <form id="chat-form">
+            <textarea id="message" rows="1" maxlength="16000" aria-label="Messaggio" placeholder="Scrivi un messaggio..." required></textarea>
+            <button id="send" class="primary" type="submit">Invia</button>
+          </form>
+          <p id="chat-error" class="notice" role="alert"></p>
+        </div>
+      </section>
+    </div>
+  </main>
+  <script>
+    const messages = document.querySelector("#messages");
+    const chatError = document.querySelector("#chat-error");
+    const sendButton = document.querySelector("#send");
+    const trainButton = document.querySelector("#train");
+    const instructionsInput = document.querySelector("#instructions-input");
+    const storedInstructions = document.querySelector("#stored-instructions");
+
+    async function request(path, options = {}) {
+      const response = await fetch(path, {
+        ...options,
+        headers: { "Content-Type": "application/json", ...options.headers },
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Richiesta non riuscita.");
+      return data;
+    }
+
+    function addMessage(role, text, label) {
+      const empty = messages.querySelector(".empty");
+      if (empty) empty.remove();
+      const element = document.createElement("div");
+      element.className = `message ${role}`;
+      const heading = document.createElement("span");
+      heading.className = "message-label";
+      heading.textContent = label;
+      const content = document.createElement("span");
+      content.textContent = text;
+      element.append(heading, content);
+      messages.append(element);
+      messages.scrollTop = messages.scrollHeight;
+    }
+
+    async function refreshStatus() {
+      try {
+        const status = await request("/api/status");
+        const dot = document.querySelector("#status-dot");
+        const modelStatus = document.querySelector("#model-status");
+        dot.classList.toggle("ready", status.model_ready);
+        modelStatus.textContent = status.model_ready ? "Modello pronto" : "Modello non ancora addestrato";
+        const running = status.training_status === "running";
+        trainButton.disabled = running;
+        document.querySelector("#training-status").textContent = running
+          ? "Addestramento in corso..."
+          : status.training_status === "completed" ? "Addestramento completato." :
+            status.training_status === "failed" ? "Addestramento non riuscito." :
+              "Nessun addestramento in corso.";
+        document.querySelector("#training-log").textContent = status.training_log;
+        sendButton.disabled = running;
+      } catch (error) {
+        document.querySelector("#model-status").textContent = error.message;
+      }
+    }
+
+    document.querySelector("#chat-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const input = document.querySelector("#message");
+      const message = input.value.trim();
+      if (!message) return;
+      chatError.textContent = "";
+      addMessage("user", message, "Tu");
+      input.value = "";
+      sendButton.disabled = true;
+      try {
+        const result = await request("/api/chat", {
+          method: "POST",
+          body: JSON.stringify({
+            message,
+            effort: document.querySelector("#effort").value,
+            agent: document.querySelector("#agent").value,
+          }),
+        });
+        addMessage("assistant", result.response, `BitGenesis · impegno ${result.effort}`);
+      } catch (error) {
+        chatError.textContent = error.message;
+      } finally {
+        sendButton.disabled = false;
+        input.focus();
+      }
+    });
+
+    document.querySelector("#message").addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        document.querySelector("#chat-form").requestSubmit();
+      }
+    });
+
+    document.querySelector("#new-chat").addEventListener("click", async () => {
+      try {
+        await request("/api/reset", { method: "POST", body: "{}" });
+        messages.replaceChildren();
+        const empty = document.createElement("div");
+        empty.className = "empty";
+        empty.textContent = "Nuova conversazione: scrivi un messaggio qui sotto.";
+        messages.append(empty);
+        chatError.textContent = "";
+      } catch (error) {
+        chatError.textContent = error.message;
+      }
+    });
+
+    async function saveInstructions(action) {
+      try {
+        const result = await request("/api/instructions", {
+          method: "POST",
+          body: JSON.stringify({ action, text: instructionsInput.value }),
+        });
+        storedInstructions.textContent = result.instructions || "Nessuna istruzione salvata.";
+        instructionsInput.value = "";
+      } catch (error) {
+        chatError.textContent = error.message;
+      }
+    }
+
+    document.querySelector("#append-instructions").addEventListener("click", () => saveInstructions("append"));
+    document.querySelector("#replace-instructions").addEventListener("click", () => saveInstructions("replace"));
+
+    trainButton.addEventListener("click", async () => {
+      const steps = Number(document.querySelector("#steps").value);
+      trainButton.disabled = true;
+      try {
+        await request("/api/train", {
+          method: "POST",
+          body: JSON.stringify({ steps }),
+        });
+        await refreshStatus();
+      } catch (error) {
+        chatError.textContent = error.message;
+        trainButton.disabled = false;
+      }
+    });
+
+    request("/api/instructions")
+      .then((result) => {
+        storedInstructions.textContent = result.instructions || "Nessuna istruzione salvata.";
+      })
+      .catch((error) => { chatError.textContent = error.message; });
+    refreshStatus();
+    window.setInterval(refreshStatus, 2000);
+  </script>
+</body>
+</html>

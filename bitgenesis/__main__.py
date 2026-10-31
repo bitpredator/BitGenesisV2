@@ -339,14 +339,40 @@ def main(argv: Sequence[str] | None = None) -> None:
         default="auto",
         help="Livello di impegno iniziale della chat (default: auto).",
     )
+    parser.add_argument(
+        "--web",
+        action="store_true",
+        help="Apri l'interfaccia web locale invece della chat nel terminale.",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=8765,
+        help="Porta dell'interfaccia web locale (default: 8765).",
+    )
     args = parser.parse_args(argv)
     if args.max_new_tokens < 0:
         parser.error("--max-new-tokens must not be negative")
     if not math.isfinite(args.temperature) or args.temperature <= 0:
         parser.error("--temperature must be a finite number greater than zero")
+    if args.web and not 1 <= args.port <= 65535:
+        parser.error("--port must be between 1 and 65535")
 
     model_path = config.models_dir / "bitgenesis.pt"
     tokenizer_path = config.models_dir / "tokenizer.json"
+    if args.web:
+        from bitgenesis.web import run_web_server
+
+        run_web_server(
+            config=config,
+            model_path=model_path,
+            tokenizer_path=tokenizer_path,
+            max_new_tokens=args.max_new_tokens,
+            temperature=args.temperature,
+            effort=args.effort,
+            port=args.port,
+        )
+        return
     run_chat(
         model_path=model_path,
         tokenizer_path=tokenizer_path,

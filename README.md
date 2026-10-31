@@ -77,6 +77,28 @@ there is no local nickname setting. Choosing a personal nickname is reserved
 for a future official server, where it can be associated with a verified
 account.
 
+## Use the local web interface
+
+If you prefer not to use the interactive terminal, start the browser
+interface from the repository folder:
+
+```console
+python -m bitgenesis --web
+```
+
+BitGenesis opens its local page in your browser. The interface lets you chat
+with the local model, choose the chat or coding profile and generation effort,
+manage `Genesis.md`, and start or monitor conversational training from the
+included `.jsonl` data. Training runs on the computer and may take time.
+The web server listens only on `127.0.0.1`; it is not available to other
+devices on the network. Keep the terminal window open while using the page;
+press `Ctrl+C` there to stop the server. Use `--port 8766` to select another
+local port if the default port is busy.
+
+The chat and its history are kept in memory for the current server session.
+Closing or restarting the server clears the conversation. Model files and
+project instructions remain on the computer.
+
 To compare the effort levels on a small, fixed prompt set, train a conversation
 model and run:
 
