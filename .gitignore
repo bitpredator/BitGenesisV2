@@ -30,6 +30,11 @@ data/datasets/*
 !data/datasets/programmazione_python_pratica.jsonl
 !data/datasets/comandi_bitgenesis.jsonl
 !data/datasets/conversazione_italiano.jsonl
+!data/datasets/esempi_sintetici_inglese.jsonl
+!data/datasets/programmazione_python_basi_inglese.jsonl
+!data/datasets/programmazione_python_pratica_inglese.jsonl
+!data/datasets/comandi_bitgenesis_inglese.jsonl
+!data/datasets/conversazione_inglese.jsonl
 data/models/
 NEXT_STEPS.md
 

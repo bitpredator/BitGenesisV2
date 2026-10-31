@@ -105,6 +105,38 @@ class SplitCorpusTests(unittest.TestCase):
 
 
 class LoadConversationsTests(unittest.TestCase):
+    def test_english_datasets_match_italian_record_and_turn_counts(self) -> None:
+        dataset_dir = (
+            Path(__file__).resolve().parents[1] / "data" / "datasets"
+        )
+        records = load_conversation_records(dataset_dir)
+        datasets = {}
+        for record in records:
+            datasets.setdefault(record.path.name, []).append(record.content)
+        pairs = (
+            ("comandi_bitgenesis.jsonl", "comandi_bitgenesis_inglese.jsonl"),
+            ("conversazione_italiano.jsonl", "conversazione_inglese.jsonl"),
+            ("esempi_sintetici.jsonl", "esempi_sintetici_inglese.jsonl"),
+            (
+                "programmazione_python_basi.jsonl",
+                "programmazione_python_basi_inglese.jsonl",
+            ),
+            (
+                "programmazione_python_pratica.jsonl",
+                "programmazione_python_pratica_inglese.jsonl",
+            ),
+        )
+
+        for italian_name, english_name in pairs:
+            with self.subTest(dataset=english_name):
+                italian = datasets[italian_name]
+                english = datasets[english_name]
+                self.assertEqual(len(english), len(italian))
+                self.assertEqual(
+                    [len(conversation.turns) for conversation in english],
+                    [len(conversation.turns) for conversation in italian],
+                )
+
     def test_programming_curriculum_is_valid_training_data(self) -> None:
         dataset_dir = (
             Path(__file__).resolve().parents[1] / "data" / "datasets"

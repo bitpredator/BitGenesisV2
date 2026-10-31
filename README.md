@@ -9,7 +9,8 @@ This repository is the starting point for building the project. Its features, te
 BitGenesis is planned with these goals:
 
 - Start as a Python project compatible with Windows.
-- Understand Italian input and respond in Italian.
+- Focus on Italian while adding English training examples; generated responses
+  remain experimental and are not guaranteed to be reliable in either language.
 - Develop and train its own model from scratch, running locally without externally hosted AI services.
 - Eventually become a Windows application.
 
@@ -134,15 +135,24 @@ The JSONL report records each response, selected level, generated token count,
 and generation time. Review response quality manually using the criteria in
 the report; timing and length alone do not measure correctness.
 
+## Bilingual conversation datasets
+
+The five included conversation datasets have English counterparts ending in
+`_inglese.jsonl`; the original Italian files are unchanged. By default,
+conversation training loads all JSONL files under `data/datasets/`, so it
+includes both languages. This adds bilingual training examples but does not
+guarantee that the experimental model will consistently understand or answer
+in either language. Italian remains the configured default language.
+
 ## Learn Python programming
 
-The included Italian conversation lessons cover introductory Python and
-practical topics: variables and expressions, conditionals, loops, lists,
-dictionaries, functions, type annotations, exceptions, files and JSON,
+The included Italian and English conversation lessons cover introductory
+Python and practical topics: variables and expressions, conditionals, loops,
+lists, dictionaries, functions, type annotations, exceptions, files and JSON,
 modules, virtual environments, classes, readable code, and `unittest`.
 The examples target the project's Python 3.11+ baseline and are original
 learning material, not a substitute for reviewing and running code. The
-general Italian conversation corpus also includes examples for clarification,
+general conversation corpora also include examples for clarification,
 concise explanations, faithful summaries, and acknowledging uncertainty.
 These original examples broaden training coverage but do not make the small
 from-scratch model a reliable general assistant. Review the expanded default
