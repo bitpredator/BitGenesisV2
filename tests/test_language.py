@@ -1,6 +1,7 @@
 import unittest
 
 from bitgenesis.agents import (
+    bitpredator_response,
     build_response_prompt,
     license_response,
     self_introduction,
@@ -110,6 +111,28 @@ class LanguageDetectionTests(unittest.TestCase):
             "See the LICENSE file for the full text.",
         )
         self.assertIsNone(license_response("Come funziona BitGenesis?"))
+
+    def test_bitpredator_profile_questions_get_a_factual_response(self) -> None:
+        italian = bitpredator_response("Cosa sai dirmi su Bitpredator?")
+        english = bitpredator_response("What do you know about Bitpredator?")
+
+        self.assertIsNotNone(italian)
+        self.assertIsNotNone(english)
+        for response in (italian, english):
+            self.assertIn("https://www.twitch.tv/bitpredator", response or "")
+            self.assertIn("https://github.com/bitpredator", response or "")
+        self.assertIn("creatore", italian or "")
+        self.assertIn("Skull Network Italia", italian or "")
+        self.assertIn("verificate", italian or "")
+        self.assertIn("creator", english or "")
+        self.assertIn("founder and administrator", english or "")
+        self.assertIn("independently verified", english or "")
+        self.assertIsNone(
+            bitpredator_response("Cosa sai dirmi su BitGenesis?")
+        )
+        self.assertIsNone(
+            bitpredator_response("Come funziona il nome Bitpredator?")
+        )
 
 
 if __name__ == "__main__":

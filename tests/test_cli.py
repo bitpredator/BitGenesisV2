@@ -91,6 +91,25 @@ class RunChatTests(unittest.TestCase):
         self.assertFalse(any("Modello non disponibile" in line for line in output))
         chat_class.assert_not_called()
 
+    def test_bitpredator_profile_works_without_a_trained_model(self) -> None:
+        messages = iter(["Cosa sai dirmi su Bitpredator?", "esci"])
+        output: list[str] = []
+
+        with patch("bitgenesis.__main__.ConversationChat") as chat_class:
+            run_chat(
+                input_fn=lambda _prompt: next(messages),
+                output_fn=output.append,
+                model_path=Path("missing/model.pt"),
+                tokenizer_path=Path("missing/tokenizer.json"),
+            )
+
+        response = "\n".join(output)
+        self.assertIn("Bitpredator ne è il creatore.", response)
+        self.assertIn("https://www.twitch.tv/bitpredator", response)
+        self.assertIn("https://github.com/bitpredator", response)
+        self.assertFalse(any("Modello non disponibile" in line for line in output))
+        chat_class.assert_not_called()
+
     def test_coding_self_introduction_describes_its_limits(self) -> None:
         messages = iter(["/agente coding", "Chi sei?", "esci"])
         output: list[str] = []

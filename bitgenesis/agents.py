@@ -23,6 +23,12 @@ _INTRODUCTION_PATTERNS = (
     re.compile(r"\bwhat are your capabilities\b"),
 )
 _LICENSE_PATTERN = re.compile(r"\b(?:licenza|license|licensing)\b")
+_BITPREDATOR_PATTERN = re.compile(r"\bbitpredator\b")
+_BITPREDATOR_PROFILE_QUERY_PATTERN = re.compile(
+    r"\b(?:chi\s+e|cosa\s+(?:sai|puoi)\s+(?:dirmi|dire|raccontarmi)|"
+    r"parlami\s+di|raccontami\s+di|who\s+is|what\s+do\s+you\s+know\s+about|"
+    r"tell\s+me\s+about)\b"
+)
 _GREETING_PATTERN = re.compile(
     r"(?:ciao|salve|buongiorno|buonasera|buon pomeriggio|ehi|hey|hello|hi|"
     r"good morning|good afternoon|good evening)"
@@ -166,6 +172,45 @@ def license_response(
     return (
         "BitGenesis è distribuito con licenza MIT. "
         "Consulta il file LICENSE per il testo completo."
+    )
+
+
+def bitpredator_response(
+    prompt: str,
+    language: Language | None = None,
+) -> str | None:
+    """Return repository-grounded information for direct Bitpredator profile questions."""
+    normalized = unicodedata.normalize("NFKD", prompt.casefold())
+    normalized = "".join(
+        character
+        for character in normalized
+        if not unicodedata.combining(character)
+    )
+    if not (
+        _BITPREDATOR_PATTERN.search(normalized)
+        and _BITPREDATOR_PROFILE_QUERY_PATTERN.search(normalized)
+    ):
+        return None
+
+    selected_language = detect_language(prompt) if language is None else language
+    if selected_language == "en":
+        return (
+            "According to BitGenesis's materials, Bitpredator is its creator. "
+            "The included profile describes Bitpredator as the founder and "
+            "administrator of Skull Network Italia, with interests in computing, "
+            "programming, and gaming. The listed profiles are Twitch: "
+            "https://www.twitch.tv/bitpredator and GitHub: "
+            "https://github.com/bitpredator. I don't have independently verified "
+            "biographical information beyond what the project reports."
+        )
+    return (
+        "Secondo i materiali di BitGenesis, Bitpredator ne è il creatore. "
+        "La presentazione inclusa nel progetto lo descrive come founder e "
+        "amministratore di Skull Network Italia, appassionato di informatica, "
+        "programmazione e gaming. I profili indicati sono Twitch: "
+        "https://www.twitch.tv/bitpredator e GitHub: "
+        "https://github.com/bitpredator. Non ho altre informazioni "
+        "biografiche verificate oltre a quelle riportate dal progetto."
     )
 
 

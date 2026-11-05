@@ -7,6 +7,7 @@ from pathlib import Path
 
 from bitgenesis.agents import (
     AgentName,
+    bitpredator_response,
     build_response_prompt,
     local_user_rule,
     license_response,
@@ -247,6 +248,11 @@ def run_chat(
             continue
         if message.strip():
             language = detect_language(message)
+            bitpredator = bitpredator_response(message, language)
+            if bitpredator is not None:
+                write_output(f"  BitGenesis > {bitpredator}")
+                history.append((message.strip(), bitpredator))
+                continue
             license = license_response(message, language)
             if license is not None:
                 write_output(f"  BitGenesis > {license}")

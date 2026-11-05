@@ -14,6 +14,7 @@ import webbrowser
 
 from bitgenesis.agents import (
     AgentName,
+    bitpredator_response,
     build_response_prompt,
     license_response,
     local_user_rule,
@@ -136,6 +137,15 @@ class WebApplication:
         selected_agent = cast(AgentName, agent)
         clean_message = message.strip()
         language = detect_language(clean_message)
+        bitpredator = bitpredator_response(clean_message, language)
+        if bitpredator is not None:
+            with self.lock:
+                self.history.append((message.strip(), bitpredator))
+            return {
+                "response": bitpredator,
+                "effort": "non applicato",
+                "generated": False,
+            }
         license = license_response(clean_message, language)
         if license is not None:
             with self.lock:

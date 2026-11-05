@@ -24,13 +24,14 @@ class LoadEvaluationCasesTests(unittest.TestCase):
 
         cases = load_evaluation_cases(path)
 
-        self.assertEqual(len(cases), 18)
+        self.assertEqual(len(cases), 19)
         self.assertEqual(len({case.id for case in cases}), len(cases))
         self.assertTrue(all(case.criteria for case in cases))
         self.assertIn("license", {case.id for case in cases})
         self.assertIn("italian-origin", {case.id for case in cases})
         self.assertIn("language-model-limits", {case.id for case in cases})
         self.assertIn("state-uncertainty", {case.id for case in cases})
+        self.assertIn("bitpredator-profile", {case.id for case in cases})
 
     def test_effort_benchmark_cases_cover_auto_levels(self) -> None:
         path = (
