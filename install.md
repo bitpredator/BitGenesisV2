@@ -10,7 +10,7 @@ and generation require the optional PyTorch dependency.
 | --- | --- |
 | Operating system | Windows is the currently documented platform |
 | Python | 3.11 or newer |
-| Training and generation | PyTorch CUDA 12.8 build, installed from `requirements-training.txt` |
+| Training and generation | PyTorch CUDA 12.6 build, installed from `requirements-training.txt` |
 | Processor | CPU execution is supported |
 | GPU | NVIDIA GPU with a CUDA-compatible driver; training automatically uses CUDA when available |
 | RAM and free disk space | No minimum has been measured or published |
@@ -56,7 +56,7 @@ install the dependency:
 python -m pip install -r requirements-training.txt
 ```
 
-The training requirements install the CUDA 12.8 build of PyTorch. The project
+The training requirements install the CUDA 12.6 build of PyTorch. The project
 automatically selects CUDA when it is available and otherwise falls back to
 the CPU. Verify the selected Python environment can see the GPU:
 
