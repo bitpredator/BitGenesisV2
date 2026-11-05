@@ -25,6 +25,7 @@ class TrainingCheckpointState:
     configuration: dict[str, object]
     data_fingerprint: str
     history: list[dict[str, float]]
+    cuda_rng_state: Tensor | None = None
 
 
 CheckpointCallback = Callable[
@@ -223,6 +224,7 @@ def train_model(
     optimizer_state: dict[str, Any] | None = None,
     generator_state: Tensor | None = None,
     rng_state: Tensor | None = None,
+    cuda_rng_state: Tensor | None = None,
     initial_history: Sequence[dict[str, float]] = (),
     checkpoint_interval: int = 100,
     checkpoint_callback: CheckpointCallback | None = None,
@@ -255,6 +257,8 @@ def train_model(
         generator.set_state(generator_state)
     if rng_state is not None:
         torch.set_rng_state(rng_state.cpu())
+    if device.type == "cuda" and cuda_rng_state is not None:
+        torch.cuda.set_rng_state(cuda_rng_state.cpu(), device)
     history = list(initial_history)
 
     for step in range(start_step + 1, steps + 1):
@@ -360,6 +364,7 @@ def save_checkpoint(
                 "optimizer_state": training_state.optimizer_state,
                 "generator_state": training_state.generator_state,
                 "rng_state": training_state.rng_state,
+                "cuda_rng_state": training_state.cuda_rng_state,
                 "configuration": training_state.configuration,
                 "data_fingerprint": training_state.data_fingerprint,
                 "history": training_state.history,
@@ -432,6 +437,7 @@ def load_training_checkpoint(
     optimizer_state = state_data.get("optimizer_state")
     generator_state = state_data.get("generator_state")
     rng_state = state_data.get("rng_state")
+    cuda_rng_state = state_data.get("cuda_rng_state")
     configuration = state_data.get("configuration")
     data_fingerprint = state_data.get("data_fingerprint")
     history = state_data.get("history")
@@ -444,6 +450,13 @@ def load_training_checkpoint(
         or generator_state.dtype != torch.uint8
         or not isinstance(rng_state, Tensor)
         or rng_state.dtype != torch.uint8
+        or (
+            cuda_rng_state is not None
+            and (
+                not isinstance(cuda_rng_state, Tensor)
+                or cuda_rng_state.dtype != torch.uint8
+            )
+        )
         or not isinstance(configuration, dict)
         or not isinstance(data_fingerprint, str)
         or not isinstance(history, list)
@@ -468,6 +481,7 @@ def load_training_checkpoint(
         configuration=configuration,
         data_fingerprint=data_fingerprint,
         history=history,
+        cuda_rng_state=cuda_rng_state,
     )
 
 

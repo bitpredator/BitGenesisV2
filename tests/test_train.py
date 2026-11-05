@@ -4,6 +4,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import torch
@@ -11,10 +12,42 @@ import torch
 from bitgenesis.config import load_config
 from bitgenesis.tokenizer import BPETokenizer
 from bitgenesis.training import load_checkpoint
-from bitgenesis.train import main
+from bitgenesis.train import _select_training_device, main
 
 
 class TrainCommandTests(unittest.TestCase):
+    def test_cuda_device_applies_allocator_limit_with_context_margin(self) -> None:
+        total_vram_bytes = 8 * 1024**3
+        with (
+            patch("bitgenesis.train.torch.cuda.is_available", return_value=True),
+            patch(
+                "bitgenesis.train.torch.cuda.get_device_properties",
+                return_value=SimpleNamespace(total_memory=total_vram_bytes),
+            ),
+            patch("bitgenesis.train.torch.cuda.get_device_name", return_value="GPU"),
+            patch("bitgenesis.train.torch.cuda.current_device", return_value=0),
+            patch("bitgenesis.train.torch.cuda.set_per_process_memory_fraction") as set_limit,
+        ):
+            device, limit_bytes = _select_training_device("cuda")
+
+        self.assertEqual(device, torch.device("cuda"))
+        self.assertEqual(limit_bytes, 3 * 1024**3)
+        set_limit.assert_called_once_with(3 / 8, 0)
+
+    def test_auto_device_falls_back_to_cpu_when_cuda_is_unavailable(self) -> None:
+        with patch("bitgenesis.train.torch.cuda.is_available", return_value=False):
+            device, limit_bytes = _select_training_device("auto")
+
+        self.assertEqual(device, torch.device("cpu"))
+        self.assertEqual(limit_bytes, 0)
+
+    def test_explicit_cuda_requires_cuda_enabled_pytorch(self) -> None:
+        with (
+            patch("bitgenesis.train.torch.cuda.is_available", return_value=False),
+            self.assertRaisesRegex(RuntimeError, "CUDA-enabled PyTorch"),
+        ):
+            _select_training_device("cuda")
+
     def test_refuses_metrics_output_that_would_overwrite_training_files(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -41,6 +74,8 @@ class TrainCommandTests(unittest.TestCase):
                 str(output_dir),
                 "--data-format",
                 "conversations",
+                "--device",
+                "cpu",
             ]
 
             for metrics_path in (
@@ -117,6 +152,8 @@ class TrainCommandTests(unittest.TestCase):
                         str(output_dir),
                         "--data-format",
                         "conversations",
+                        "--device",
+                        "cpu",
                         "--context-length",
                         "1",
                         "--embedding-dim",
@@ -148,6 +185,11 @@ class TrainCommandTests(unittest.TestCase):
                 report["configuration"]["data_format"], "conversations"
             )
             self.assertEqual(report["configuration"]["seed"], 42)
+            self.assertEqual(report["configuration"]["device"], "cpu")
+            self.assertEqual(
+                report["configuration"]["vram_allocator_limit_bytes"],
+                0,
+            )
             example_counts = {
                 report["configuration"]["training_examples"],
                 report["configuration"]["validation_examples"],
@@ -214,6 +256,8 @@ class TrainCommandTests(unittest.TestCase):
                         str(output_dir),
                         "--data-format",
                         "conversations",
+                        "--device",
+                        "cpu",
                         "--context-length",
                         "1",
                         "--embedding-dim",

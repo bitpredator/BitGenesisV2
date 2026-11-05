@@ -135,6 +135,50 @@ class SplitCorpusTests(unittest.TestCase):
 
 
 class LoadConversationsTests(unittest.TestCase):
+    def test_step_by_step_examples_are_available_in_both_languages(self) -> None:
+        dataset_dir = (
+            Path(__file__).resolve().parents[1] / "data" / "datasets"
+        )
+        records = load_conversation_records(dataset_dir)
+        expected_starts = {
+            "conversazione_italiano.jsonl": (
+                "Un prodotto costa",
+                "Una ricetta per",
+                "Come calcolo la media",
+                "Quanti minuti sono",
+                "Questo codice dà",
+                "Un test automatico",
+                "Ho 12 pagine",
+                "Come confronto due soluzioni",
+            ),
+            "conversazione_inglese.jsonl": (
+                "A product costs",
+                "A recipe for",
+                "How do I find the average",
+                "How many minutes are",
+                "This code gives",
+                "An automated test",
+                "I have 12 pages",
+                "How can I compare two solutions",
+            ),
+        }
+
+        for dataset_name, starts in expected_starts.items():
+            with self.subTest(dataset=dataset_name):
+                examples = [
+                    record.content
+                    for record in records
+                    if record.path.name == dataset_name
+                    and record.content.turns[0][0].startswith(starts)
+                ]
+                self.assertEqual(len(examples), 8)
+                self.assertTrue(
+                    all(
+                        conversation.turns[0][1].startswith("1.")
+                        for conversation in examples
+                    )
+                )
+
     def test_italian_stories_are_available_as_conversation_responses(self) -> None:
         dataset_dir = (
             Path(__file__).resolve().parents[1] / "data" / "datasets"

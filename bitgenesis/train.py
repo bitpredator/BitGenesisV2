@@ -32,6 +32,39 @@ from bitgenesis.training import (
     train_model,
 )
 
+_MAX_VRAM_BYTES = 4 * 1024**3
+_CUDA_CONTEXT_MARGIN_BYTES = 1024**3
+
+
+def _select_training_device(requested: str) -> tuple[torch.device, int]:
+    if requested == "cpu":
+        return torch.device("cpu"), 0
+    if not torch.cuda.is_available():
+        if requested == "cuda":
+            raise RuntimeError(
+                "--device cuda requires a CUDA-enabled PyTorch installation "
+                "and an available NVIDIA GPU."
+            )
+        print("CUDA non disponibile: addestramento sulla CPU.")
+        return torch.device("cpu"), 0
+
+    device = torch.device("cuda")
+    total_vram_bytes = torch.cuda.get_device_properties(device).total_memory
+    allocator_limit_bytes = min(
+        _MAX_VRAM_BYTES - _CUDA_CONTEXT_MARGIN_BYTES,
+        total_vram_bytes,
+    )
+    torch.cuda.set_per_process_memory_fraction(
+        allocator_limit_bytes / total_vram_bytes,
+        torch.cuda.current_device(),
+    )
+    print(
+        f"GPU: {torch.cuda.get_device_name(device)}; limite allocatore PyTorch "
+        f"{allocator_limit_bytes / 1024**3:.1f} GiB "
+        "(margine di 1 GiB per il contesto CUDA)."
+    )
+    return device, allocator_limit_bytes
+
 
 def _report_duplicate_groups(
     records: Sequence[CorpusRecord[str] | CorpusRecord[Conversation]],
@@ -108,6 +141,12 @@ def main(argv: Sequence[str] | None = None) -> None:
     parser.add_argument("--dropout", type=float, default=config.model.dropout)
     parser.add_argument("--steps", type=int, default=1000)
     parser.add_argument("--batch-size", type=int, default=32)
+    parser.add_argument(
+        "--device",
+        choices=("auto", "cpu", "cuda"),
+        default="auto",
+        help="Training device; auto uses CUDA when available.",
+    )
     parser.add_argument("--learning-rate", type=float, default=3e-4)
     parser.add_argument("--eval-interval", type=int, default=100)
     parser.add_argument("--eval-batches", type=int, default=10)
@@ -149,6 +188,13 @@ def main(argv: Sequence[str] | None = None) -> None:
         )
     if args.checkpoint_interval < 1:
         parser.error("--checkpoint-interval must be a positive integer.")
+
+    try:
+        training_device, vram_allocator_limit_bytes = _select_training_device(
+            args.device
+        )
+    except RuntimeError as error:
+        parser.error(str(error))
 
     output_dir = Path(args.output_dir)
     checkpoint_path = output_dir / "bitgenesis.pt"
@@ -308,6 +354,11 @@ def main(argv: Sequence[str] | None = None) -> None:
                 optimizer_state=optimizer.state_dict(),
                 generator_state=generator.get_state(),
                 rng_state=torch.get_rng_state(),
+                cuda_rng_state=(
+                    torch.cuda.get_rng_state(training_device)
+                    if training_device.type == "cuda"
+                    else None
+                ),
                 configuration=resume_config,
                 data_fingerprint=data_fingerprint,
                 history=list(history),
@@ -359,7 +410,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         eval_interval=args.eval_interval,
         eval_batches=args.eval_batches,
         seed=args.seed,
-        device="cpu",
+        device=training_device,
         train_target_mask=train_target_mask,
         validation_target_mask=validation_target_mask,
         start_step=0 if training_state is None else training_state.step,
@@ -370,6 +421,9 @@ def main(argv: Sequence[str] | None = None) -> None:
             None if training_state is None else training_state.generator_state
         ),
         rng_state=None if training_state is None else training_state.rng_state,
+        cuda_rng_state=(
+            None if training_state is None else training_state.cuda_rng_state
+        ),
         initial_history=(
             [] if training_state is None else training_state.history
         ),
@@ -405,6 +459,8 @@ def main(argv: Sequence[str] | None = None) -> None:
             "checkpoint_interval": args.checkpoint_interval,
             "validation_fraction": args.validation_fraction,
             "seed": args.seed,
+            "device": str(training_device),
+            "vram_allocator_limit_bytes": vram_allocator_limit_bytes,
             "generate_tokens": args.generate_tokens,
             "temperature": args.temperature,
             "selected_model_step": best_model_step,

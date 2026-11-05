@@ -10,9 +10,9 @@ and generation require the optional PyTorch dependency.
 | --- | --- |
 | Operating system | Windows is the currently documented platform |
 | Python | 3.11 or newer |
-| Training and generation | PyTorch 2.6 or newer, installed from `requirements-training.txt` |
-| Processor | CPU execution is supported; no GPU is required |
-| GPU | Not currently used by the training command, which selects the CPU |
+| Training and generation | PyTorch CUDA 12.8 build, installed from `requirements-training.txt` |
+| Processor | CPU execution is supported |
+| GPU | NVIDIA GPU with a CUDA-compatible driver; training automatically uses CUDA when available |
 | RAM and free disk space | No minimum has been measured or published |
 
 The model is initialized from random weights and runs locally. The included
@@ -56,10 +56,23 @@ install the dependency:
 python -m pip install -r requirements-training.txt
 ```
 
-Training uses the CPU by default, which works without a GPU. The model starts
-with random weights; the result depends on the amount, quality, and permitted
-use of your local text. Training a tiny example is not expected to produce
-useful conversational behavior.
+The training requirements install the CUDA 12.8 build of PyTorch. The project
+automatically selects CUDA when it is available and otherwise falls back to
+the CPU. Verify the selected Python environment can see the GPU:
+
+```powershell
+python -c "import torch; print(torch.__version__); print(torch.cuda.is_available()); print(torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU')"
+```
+
+Training limits PyTorch's caching allocator to 3 GiB, leaving a 1 GiB margin
+for CUDA context overhead within the 4 GiB target. This is not a hard cap on
+total GPU memory: CUDA driver/context allocations and other processes are
+outside that allocator limit. Use `--device cpu` to force CPU training or
+`--device cuda` to require CUDA.
+
+The model starts with random weights; the result depends on the amount,
+quality, and permitted use of your local text. Training a tiny example is not
+expected to produce useful conversational behavior.
 
 ## Configure generation and model defaults
 

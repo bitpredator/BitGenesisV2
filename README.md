@@ -147,6 +147,8 @@ includes both languages. This adds bilingual training examples but does not
 guarantee that the experimental model will consistently understand or answer
 in either language. The configuration still specifies Italian as its default;
 chat replies follow message-language detection and use English when unclear.
+The Italian and English conversation sets also include paired examples that
+explain calculations, code fixes, testing, planning, and comparisons in steps.
 The three Italian stories are also available as complete assistant responses
 in `conversazione_italiano.jsonl`; they do not have English counterparts.
 Story-writing requests receive a creative-writing instruction that asks the
@@ -175,6 +177,13 @@ lessons together with the other included conversation examples:
 ```console
 python -m bitgenesis.train --data-format conversations --steps 1000
 ```
+
+Training uses CUDA automatically when a compatible GPU is available; force CPU
+with `--device cpu`, or require CUDA with `--device cuda`. The PyTorch CUDA
+allocator is capped at 3 GiB, leaving a 1 GiB margin toward a 4 GiB target
+for the CUDA context and other overhead. This cap applies to allocations managed
+by PyTorch, not other GPU processes or all driver memory, so total VRAM use can
+still vary. If CUDA is unavailable, `auto` reports that it is using the CPU.
 
 Training periodically saves a resumable checkpoint to
 `data/models/bitgenesis_training.pt`; adjust the frequency with
