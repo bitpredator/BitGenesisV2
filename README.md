@@ -210,9 +210,10 @@ file is treated as one document; files are loaded in a stable path order. Invali
 UTF-8 files and a missing or empty corpus are reported as errors. Keep only
 training material you have the right to use.
 
-The Italian text corpus includes three original stories (`IT-STORY-0001.txt`
-through `IT-STORY-0003.txt`). Train on these and any other `.txt` documents in
-the dataset directory with the default text format:
+The Italian text corpus includes three original stories in
+`data/datasets/it-stories/` (`IT-STORY-0001.txt` through `IT-STORY-0003.txt`).
+Train on these and any other `.txt` documents in the dataset directory with the
+default text format:
 
 ```console
 python -m bitgenesis.train --data-format text --steps 1000

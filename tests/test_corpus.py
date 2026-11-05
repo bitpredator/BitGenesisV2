@@ -20,7 +20,7 @@ class LoadCorpusTests(unittest.TestCase):
 
         records = load_corpus_records(dataset_dir)
         stories = {
-            record.path.name: record.content
+            record.path.name: record
             for record in records
             if record.path.name.startswith("IT-STORY-")
         }
@@ -40,7 +40,8 @@ class LoadCorpusTests(unittest.TestCase):
         }
         for filename, marker in markers.items():
             with self.subTest(story=filename):
-                self.assertIn(marker, stories[filename])
+                self.assertEqual(stories[filename].path.parent.name, "it-stories")
+                self.assertIn(marker, stories[filename].content)
 
     def test_loads_utf8_text_recursively_in_stable_order(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -155,7 +156,9 @@ class LoadConversationsTests(unittest.TestCase):
             with self.subTest(story=story_id):
                 self.assertEqual(
                     conversation.turns[0][1],
-                    (dataset_dir / story_id).read_text(encoding="utf-8"),
+                    (dataset_dir / "it-stories" / story_id).read_text(
+                        encoding="utf-8"
+                    ),
                 )
 
     def test_english_datasets_match_italian_record_and_turn_counts(self) -> None:
