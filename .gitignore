@@ -48,6 +48,10 @@ dist/
 logs/
 *.log
 
+# Local Graphify output and navigation instructions
+graphify-out/
+.github/copilot-instructions.md
+
 # Editor and operating-system files
 .vscode/
 .idea/
