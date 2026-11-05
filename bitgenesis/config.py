@@ -9,8 +9,8 @@ from typing import Any
 
 @dataclass(frozen=True)
 class GenerationSettings:
-    max_new_tokens: int = 80
-    temperature: float = 1.0
+    max_new_tokens: int = 160
+    temperature: float = 0.7
 
 
 @dataclass(frozen=True)
@@ -117,9 +117,9 @@ def load_config(config_path: Path | None = None) -> Config:
 
     generation_settings = GenerationSettings(
         max_new_tokens=_positive_integer(
-            generation, "generation", "max_new_tokens", 80, allow_zero=True
+            generation, "generation", "max_new_tokens", 160, allow_zero=True
         ),
-        temperature=_number(generation, "generation", "temperature", 1.0),
+        temperature=_number(generation, "generation", "temperature", 0.7),
     )
     evaluation_settings = EvaluationSettings(
         max_new_tokens=_positive_integer(

@@ -6,8 +6,8 @@ datasets = "data/datasets"
 models = "data/models"
 
 [generation]
-max_new_tokens = 80
-temperature = 1.0
+max_new_tokens = 160
+temperature = 0.7
 
 [evaluation]
 max_new_tokens = 160
