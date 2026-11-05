@@ -30,6 +30,8 @@ from bitgenesis.effort import (
 )
 from bitgenesis.genesis import read_instructions, update_instructions
 from bitgenesis.language import detect_language
+from bitgenesis.retrieval import LocalKnowledgeBase
+from bitgenesis.tokenizer import BPETokenizer
 
 if TYPE_CHECKING:
     from bitgenesis.generate import ConversationChat
@@ -73,6 +75,7 @@ class WebApplication:
         )
         self.history: list[tuple[str, str]] = []
         self.chat: ConversationChat | None = None
+        self.knowledge_base: LocalKnowledgeBase | None = None
         self.training_status = "idle"
         self.training_log = ""
         self.training_process: subprocess.Popen[str] | None = None
@@ -170,6 +173,26 @@ class WebApplication:
             }
 
         with self.lock:
+            try:
+                if self.knowledge_base is None:
+                    self.knowledge_base = LocalKnowledgeBase.from_directory(
+                        self.config.datasets_dir
+                    )
+                retrieved_response = self.knowledge_base.answer_from_sources(
+                    clean_message,
+                    language=language,
+                )
+            except (OSError, UnicodeError, ValueError) as error:
+                raise WebRequestError(
+                    500, f"Impossibile recuperare le informazioni locali: {error}"
+                ) from error
+            if retrieved_response is not None:
+                self.history.append((message.strip(), retrieved_response))
+                return {
+                    "response": retrieved_response,
+                    "effort": "non applicato",
+                    "generated": False,
+                }
             if self.training_status == "running":
                 raise WebRequestError(
                     409, "Attendi la fine dell'addestramento prima di chattare."
@@ -181,6 +204,7 @@ class WebApplication:
                     "per creare un modello conversazionale.",
                 )
 
+            knowledge_base: LocalKnowledgeBase | None = None
             greeting = simple_greeting(clean_message, selected_agent, language)
             if greeting is not None:
                 self.history.append((message.strip(), greeting))
@@ -201,6 +225,12 @@ class WebApplication:
                         self.model_path,
                         self.tokenizer_path,
                     )
+                if isinstance(self.chat.tokenizer, BPETokenizer):
+                    if self.knowledge_base is None:
+                        self.knowledge_base = LocalKnowledgeBase.from_directory(
+                            self.config.datasets_dir
+                        )
+                    knowledge_base = self.knowledge_base
                 project_instructions = self.instructions()
             except WebRequestError:
                 raise
@@ -224,6 +254,15 @@ class WebApplication:
                 *self.history,
                 local_user_rule(language),
             ]
+            if knowledge_base is not None:
+                prompt = knowledge_base.augment_prompt(
+                    clean_message,
+                    prompt,
+                    history=chat_history,
+                    tokenizer=self.chat.tokenizer,
+                    context_length=self.chat.model.config.context_length,
+                    language=language,
+                )
             try:
                 response = self.chat.reply(
                     prompt,

@@ -120,6 +120,22 @@ configured value, and high uses twice that value. These levels change only the
 maximum response length; they do not add reasoning capabilities or guarantee
 more accurate answers.
 
+## Retrieve information from the local corpus
+
+During chat, BitGenesis searches `.txt` documents and `.jsonl` conversations in
+the configured `paths.datasets` directory. For questions that strongly match a passage, it
+quotes the passage directly with its relative file and line or paragraph;
+otherwise it adds up to two relevant excerpts to the model prompt. The prompt
+asks the model to treat excerpts as data, avoid filling gaps with invented
+details, and cite the provided source location. Retrieval uses lexical term
+matching; it does not browse the Internet or verify whether a source is true.
+Its effectiveness depends on the coverage and quality of the local corpus.
+
+The index is built in memory the first time a question reaches the model and
+reused for that chat session. Restart the terminal chat or web server to index
+corpus changes. If a matching excerpt does not fit the model's context window,
+it is omitted rather than displacing the user's message or conversation history.
+
 After training a conversation model, compare the four levels against a small
 fixed prompt set with:
 

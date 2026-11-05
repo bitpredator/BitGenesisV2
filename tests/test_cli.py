@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 from bitgenesis.__main__ import main, run_chat
 from bitgenesis.generate import ContextLengthError
+from bitgenesis.tokenizer import BPETokenizer
 
 
 class RunChatTests(unittest.TestCase):
@@ -110,6 +111,31 @@ class RunChatTests(unittest.TestCase):
         self.assertFalse(any("Modello non disponibile" in line for line in output))
         chat_class.assert_not_called()
 
+    def test_answers_strong_local_matches_without_a_trained_model(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            corpus_dir = Path(temp_dir)
+            (corpus_dir / "profile.txt").write_text(
+                "Bitpredator lavora con Python e sviluppa software.",
+                encoding="utf-8",
+            )
+            messages = iter(["Con quali strumenti lavora Bitpredator?", "esci"])
+            output: list[str] = []
+
+            with patch("bitgenesis.__main__.ConversationChat") as chat_class:
+                run_chat(
+                    input_fn=lambda _prompt: next(messages),
+                    output_fn=output.append,
+                    model_path=Path("missing/model.pt"),
+                    tokenizer_path=Path("missing/tokenizer.json"),
+                    knowledge_directory=corpus_dir,
+                )
+
+        response = "\n".join(output)
+        self.assertIn("[profile.txt:p1]", response)
+        self.assertIn("Python", response)
+        self.assertFalse(any("Modello non disponibile" in line for line in output))
+        chat_class.assert_not_called()
+
     def test_coding_self_introduction_describes_its_limits(self) -> None:
         messages = iter(["/agente coding", "Chi sei?", "esci"])
         output: list[str] = []
@@ -186,7 +212,7 @@ class RunChatTests(unittest.TestCase):
             )
 
         prompt = chat_class.return_value.reply.call_args.args[0]
-        self.assertIn("User request: How do I organize my work?", prompt)
+        self.assertIn("How do I organize my work?", prompt)
         self.assertIn("reply in English", prompt)
         self.assertIn(
             (
@@ -228,7 +254,7 @@ class RunChatTests(unittest.TestCase):
             chat_class.assert_called_once_with(model_path, tokenizer_path)
             chat.reply.assert_called_once()
             self.assertIn(
-                "Richiesta dell'utente: Ciao, BitGenesis!",
+                "Ciao, BitGenesis!",
                 chat.reply.call_args.args[0],
             )
             self.assertIn(
@@ -249,6 +275,40 @@ class RunChatTests(unittest.TestCase):
             ]],
         )
         self.assertIn("  BitGenesis > Salve!", output)
+
+    def test_augments_chat_prompt_with_relevant_local_sources(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            corpus_dir = Path(temp_dir)
+            source = corpus_dir / "profile.txt"
+            source.write_text(
+                "Bitpredator è il creatore di BitGenesis e ama Python.",
+                encoding="utf-8",
+            )
+            messages = iter(["Raccontami qualcosa su Bitpredator?", "esci"])
+            output: list[str] = []
+
+            with (
+                patch.object(Path, "is_file", return_value=True),
+                patch("bitgenesis.__main__.ConversationChat") as chat_class,
+            ):
+                chat = chat_class.return_value
+                chat.tokenizer = BPETokenizer.train(
+                    [source.read_text(encoding="utf-8")],
+                    vocab_size=256,
+                )
+                chat.model.config.context_length = 2048
+                chat.reply.return_value = "Risposta basata sul corpus."
+                run_chat(
+                    input_fn=lambda _prompt: next(messages),
+                    output_fn=output.append,
+                    model_path=Path("model.pt"),
+                    tokenizer_path=Path("tokenizer.json"),
+                    knowledge_directory=corpus_dir,
+                )
+
+            prompt = chat.reply.call_args.args[0]
+            self.assertIn("[profile.txt:p1]", prompt)
+            self.assertIn("Bitpredator è il creatore di BitGenesis", prompt)
 
     def test_passes_previous_turns_as_context_for_next_reply(self) -> None:
         messages = iter(["Ciao, come stai?", "Come ti chiami?", "esci"])
@@ -400,7 +460,7 @@ class RunChatTests(unittest.TestCase):
         self.assertIn("chiedi chiarimenti", calls[0][0])
         self.assertIn("test non eseguiti", calls[0][0])
         self.assertIn("Scrivi una funzione Python.", calls[0][0])
-        self.assertIn("Richiesta dell'utente: Grazie", calls[1][0])
+        self.assertIn("Grazie", calls[1][0])
         self.assertIn("rispondi in italiano", calls[1][0])
         self.assertEqual(
             calls[1][1][0],
@@ -467,7 +527,7 @@ class RunChatTests(unittest.TestCase):
             [
                 "Istruzioni permanenti del progetto da Genesis.md:\n"
                 "Usa Python 3.11.\n\nScrivi test.\n\n"
-                "Richiesta dell'utente: Grazie\n\n"
+                "Grazie\n\n"
                 "rispondi in italiano."
             ],
         )
@@ -744,6 +804,7 @@ class RunChatTests(unittest.TestCase):
             patch("bitgenesis.__main__.run_chat") as run_chat_mock,
         ):
             load_config.return_value.models_dir = Path("local/models")
+            load_config.return_value.datasets_dir = Path("local/datasets")
             load_config.return_value.generation.max_new_tokens = 12
             load_config.return_value.generation.temperature = 0.6
             main([])
@@ -755,6 +816,7 @@ class RunChatTests(unittest.TestCase):
             max_new_tokens=12,
             temperature=0.6,
             effort="auto",
+            knowledge_directory=Path("local/datasets"),
         )
 
     def test_command_line_overrides_generation_settings(self) -> None:
@@ -763,6 +825,7 @@ class RunChatTests(unittest.TestCase):
             patch("bitgenesis.__main__.run_chat") as run_chat_mock,
         ):
             load_config.return_value.models_dir = Path("local/models")
+            load_config.return_value.datasets_dir = Path("local/datasets")
             load_config.return_value.generation.max_new_tokens = 12
             load_config.return_value.generation.temperature = 0.6
             main(
@@ -784,6 +847,7 @@ class RunChatTests(unittest.TestCase):
                 "max_new_tokens": 24,
                 "temperature": 0.8,
                 "effort": "alto",
+                "knowledge_directory": Path("local/datasets"),
             },
         )
 

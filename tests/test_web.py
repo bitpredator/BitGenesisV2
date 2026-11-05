@@ -8,6 +8,7 @@ import unittest
 from unittest.mock import patch
 
 from bitgenesis.config import load_config
+from bitgenesis.tokenizer import BPETokenizer
 from bitgenesis.web import LocalHTTPServer, WebApplication
 
 
@@ -24,6 +25,7 @@ class WebInterfaceTests(unittest.TestCase):
             datasets_dir=root / "datasets",
             models_dir=root / "models",
         )
+        config.datasets_dir.mkdir(parents=True)
         self.app = WebApplication(
             config,
             self.model_path,
@@ -175,6 +177,69 @@ class WebInterfaceTests(unittest.TestCase):
         self.assertEqual(len(self.app.history), 1)
         chat_class.assert_not_called()
 
+    def test_answers_strong_local_matches_without_a_trained_model(self) -> None:
+        self.app.config.datasets_dir.mkdir(parents=True, exist_ok=True)
+        (self.app.config.datasets_dir / "profile.txt").write_text(
+            "Bitpredator lavora con Python e sviluppa software.",
+            encoding="utf-8",
+        )
+
+        with patch("bitgenesis.generate.ConversationChat") as chat_class:
+            status, response = self.request(
+                "POST",
+                "/api/chat",
+                {
+                    "message": "Con quali strumenti lavora Bitpredator?",
+                    "effort": "medio",
+                    "agent": "chat",
+                },
+                origin=f"http://127.0.0.1:{self.server.server_port}",
+            )
+
+        self.assertEqual(status, 200)
+        self.assertFalse(response["generated"])
+        self.assertIn("[profile.txt:p1]", response["response"])
+        self.assertIn("Python", response["response"])
+        self.assertEqual(response["effort"], "non applicato")
+        chat_class.assert_not_called()
+
+    def test_retrieves_local_sources_for_model_chat(self) -> None:
+        self.model_path.parent.mkdir(parents=True)
+        self.model_path.touch()
+        self.tokenizer_path.touch()
+        self.app.config.datasets_dir.mkdir(parents=True, exist_ok=True)
+        source = self.app.config.datasets_dir / "profile.txt"
+        source.write_text(
+            "Bitpredator è il creatore di BitGenesis e ama Python.",
+            encoding="utf-8",
+        )
+
+        with patch("bitgenesis.generate.ConversationChat") as chat_class:
+            chat = chat_class.return_value
+            chat.tokenizer = BPETokenizer.train(
+                [source.read_text(encoding="utf-8")],
+                vocab_size=256,
+            )
+            chat.model.config.context_length = 2048
+            chat.reply.return_value = "Risposta basata sul corpus."
+            status, response = self.request(
+                "POST",
+                "/api/chat",
+                {
+                    "message": "Raccontami qualcosa su Bitpredator?",
+                    "effort": "medio",
+                    "agent": "chat",
+                },
+                origin=f"http://127.0.0.1:{self.server.server_port}",
+            )
+
+        self.assertEqual(status, 200)
+        self.assertTrue(response["generated"])
+        self.assertIn("Risposta basata sul corpus.", response["response"])
+        prompt = chat.reply.call_args.args[0]
+        self.assertIn("[profile.txt:p1]", prompt)
+        self.assertIn("Bitpredator è il creatore di BitGenesis", prompt)
+
     def test_standalone_greeting_gets_a_deterministic_reply(self) -> None:
         self.model_path.parent.mkdir(parents=True)
         self.model_path.touch()
@@ -230,7 +295,7 @@ class WebInterfaceTests(unittest.TestCase):
 
         self.assertEqual(status, 200)
         prompt = chat_class.return_value.reply.call_args.args[0]
-        self.assertIn("User request: What can I do?", prompt)
+        self.assertIn("What can I do?", prompt)
         self.assertIn("reply in English", prompt)
         self.assertIn(
             ("Rule: address the user as User.", "I will call you User."),

@@ -111,9 +111,6 @@ def build_response_prompt(
         )
         sections.append(f"{heading}\n{project_instructions}")
 
-    request_label = (
-        "User request" if language == "en" else "Richiesta dell'utente"
-    )
     normalized_message = unicodedata.normalize("NFKD", message.casefold())
     normalized_message = "".join(
         character
@@ -130,9 +127,7 @@ def build_response_prompt(
             else "Storia originale: usa parole del corpus e segui la richiesta."
         )
         sections.append(story_instruction)
-    sections.extend(
-        (f"{request_label}: {message}", language_instruction(language))
-    )
+    sections.extend((message, language_instruction(language)))
     return "\n\n".join(sections)
 
 

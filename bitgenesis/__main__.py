@@ -29,6 +29,8 @@ from bitgenesis.generate import (
     ConversationChat,
 )
 from bitgenesis.language import detect_language
+from bitgenesis.retrieval import LocalKnowledgeBase
+from bitgenesis.tokenizer import BPETokenizer
 
 _EXIT_COMMANDS = {"esci", "exit", "quit", "uscita"}
 _BANNER_WIDTH = 52
@@ -83,12 +85,18 @@ def run_chat(
     temperature: float = 1.0,
     effort: EffortLevel = "auto",
     genesis_path: Path | None = None,
+    knowledge_directory: Path | None = None,
 ) -> None:
     """Run the terminal chat using a saved local model when available."""
     read_input = input if input_fn is None else input_fn
     write_output = print if output_fn is None else output_fn
     project_genesis_path = (
         Path.cwd() / "Genesis.md" if genesis_path is None else Path(genesis_path)
+    )
+    project_knowledge_directory = (
+        Path(__file__).resolve().parents[1] / "data" / "datasets"
+        if knowledge_directory is None
+        else Path(knowledge_directory)
     )
 
     model_files_found = (
@@ -100,6 +108,7 @@ def run_chat(
     _write_welcome(write_output, model_files_found)
     history: list[tuple[str, str]] = []
     chat: ConversationChat | None = None
+    knowledge_base: LocalKnowledgeBase | None = None
     current_effort = effort
     current_agent: AgentName = "chat"
     while True:
@@ -263,6 +272,25 @@ def run_chat(
                 write_output(f"  BitGenesis > {introduction}")
                 history.append((message.strip(), introduction))
                 continue
+            try:
+                if knowledge_base is None:
+                    knowledge_base = LocalKnowledgeBase.from_directory(
+                        project_knowledge_directory
+                    )
+                retrieved_response = knowledge_base.answer_from_sources(
+                    message.strip(),
+                    language=language,
+                )
+            except (OSError, UnicodeError, ValueError) as error:
+                write_output(
+                    f"  BitGenesis > Impossibile recuperare le "
+                    f"informazioni locali: {error}"
+                )
+                continue
+            if retrieved_response is not None:
+                write_output(f"  BitGenesis > {retrieved_response}")
+                history.append((message.strip(), retrieved_response))
+                continue
             if model_path is None or tokenizer_path is None:
                 write_output(
                     "  BitGenesis > Modello non disponibile. Addestrami prima con "
@@ -306,6 +334,22 @@ def run_chat(
                 language,
             )
             chat_history.append(local_user_rule(language))
+            if isinstance(chat.tokenizer, BPETokenizer):
+                try:
+                    prompt = knowledge_base.augment_prompt(
+                        message.strip(),
+                        prompt,
+                        history=chat_history,
+                        tokenizer=chat.tokenizer,
+                        context_length=chat.model.config.context_length,
+                        language=language,
+                    )
+                except (OSError, UnicodeError, ValueError) as error:
+                    write_output(
+                        f"  BitGenesis > Impossibile recuperare le "
+                        f"informazioni locali: {error}"
+                    )
+                    continue
             try:
                 response = chat.reply(
                     prompt,
@@ -381,6 +425,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         max_new_tokens=args.max_new_tokens,
         temperature=args.temperature,
         effort=args.effort,
+        knowledge_directory=config.datasets_dir,
     )
 
 

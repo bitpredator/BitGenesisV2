@@ -49,9 +49,9 @@ class LanguageDetectionTests(unittest.TestCase):
             "en",
         )
 
-        self.assertIn("Richiesta dell'utente: Spiegami il codice.", italian_prompt)
+        self.assertIn("Spiegami il codice.", italian_prompt)
         self.assertIn("rispondi in italiano", italian_prompt)
-        self.assertIn("User request: Explain this code.", english_prompt)
+        self.assertIn("Explain this code.", english_prompt)
         self.assertIn("reply in English", english_prompt)
         self.assertIn("Coding agent instructions", english_prompt)
 
