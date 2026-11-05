@@ -13,6 +13,35 @@ from bitgenesis.corpus import (
 
 
 class LoadCorpusTests(unittest.TestCase):
+    def test_italian_stories_are_included_as_text_documents(self) -> None:
+        dataset_dir = (
+            Path(__file__).resolve().parents[1] / "data" / "datasets"
+        )
+
+        records = load_corpus_records(dataset_dir)
+        stories = {
+            record.path.name: record.content
+            for record in records
+            if record.path.name.startswith("IT-STORY-")
+        }
+
+        self.assertEqual(
+            set(stories),
+            {
+                "IT-STORY-0001.txt",
+                "IT-STORY-0002.txt",
+                "IT-STORY-0003.txt",
+            },
+        )
+        markers = {
+            "IT-STORY-0001.txt": "Valdombra",
+            "IT-STORY-0002.txt": "San Michele",
+            "IT-STORY-0003.txt": "Montequieto",
+        }
+        for filename, marker in markers.items():
+            with self.subTest(story=filename):
+                self.assertIn(marker, stories[filename])
+
     def test_loads_utf8_text_recursively_in_stable_order(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -105,6 +134,30 @@ class SplitCorpusTests(unittest.TestCase):
 
 
 class LoadConversationsTests(unittest.TestCase):
+    def test_italian_stories_are_available_as_conversation_responses(self) -> None:
+        dataset_dir = (
+            Path(__file__).resolve().parents[1] / "data" / "datasets"
+        )
+
+        records = load_conversation_records(dataset_dir)
+        story_records = [
+            record.content
+            for record in records
+            if record.path.name == "conversazione_italiano.jsonl"
+            and record.content.turns[0][0].startswith("Raccontami la storia")
+        ]
+
+        self.assertEqual(len(story_records), 3)
+        for story_id, conversation in zip(
+            ("IT-STORY-0001.txt", "IT-STORY-0002.txt", "IT-STORY-0003.txt"),
+            story_records,
+        ):
+            with self.subTest(story=story_id):
+                self.assertEqual(
+                    conversation.turns[0][1],
+                    (dataset_dir / story_id).read_text(encoding="utf-8"),
+                )
+
     def test_english_datasets_match_italian_record_and_turn_counts(self) -> None:
         dataset_dir = (
             Path(__file__).resolve().parents[1] / "data" / "datasets"
@@ -131,6 +184,14 @@ class LoadConversationsTests(unittest.TestCase):
             with self.subTest(dataset=english_name):
                 italian = datasets[italian_name]
                 english = datasets[english_name]
+                if italian_name == "conversazione_italiano.jsonl":
+                    italian = [
+                        conversation
+                        for conversation in italian
+                        if not conversation.turns[0][0].startswith(
+                            "Raccontami la storia"
+                        )
+                    ]
                 self.assertEqual(len(english), len(italian))
                 self.assertEqual(
                     [len(conversation.turns) for conversation in english],

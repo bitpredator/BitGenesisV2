@@ -175,11 +175,5 @@ def detect_language(text: str) -> Language:
 def language_instruction(language: Language) -> str:
     """Return a per-turn instruction to keep replies in the user's language."""
     if language == "it":
-        return (
-            "Istruzione per la lingua: rispondi in italiano, la stessa lingua "
-            "del messaggio dell'utente."
-        )
-    return (
-        "Language instruction: reply in English, the same language as the "
-        "user's message."
-    )
+        return "rispondi in italiano."
+    return "reply in English."

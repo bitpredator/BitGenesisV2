@@ -35,6 +35,9 @@ data/datasets/*
 !data/datasets/programmazione_python_pratica_inglese.jsonl
 !data/datasets/comandi_bitgenesis_inglese.jsonl
 !data/datasets/conversazione_inglese.jsonl
+!data/datasets/IT-STORY-0001.txt
+!data/datasets/IT-STORY-0002.txt
+!data/datasets/IT-STORY-0003.txt
 data/models/
 NEXT_STEPS.md
 

@@ -48,6 +48,15 @@ class LoadEvaluationCasesTests(unittest.TestCase):
             ["minimo", "medio", "alto", "alto"],
         )
 
+    def test_story_requests_select_high_effort_automatically(self) -> None:
+        for prompt in (
+            "Raccontami una storia ambientata in montagna.",
+            "Scrivimi una storia.",
+            "Write a story about a fox.",
+        ):
+            with self.subTest(prompt=prompt):
+                self.assertEqual(choose_effort(prompt, "auto"), "alto")
+
     def test_loads_python_programming_evaluation_cases(self) -> None:
         path = (
             Path(__file__).resolve().parents[1]

@@ -53,6 +53,31 @@ class LanguageDetectionTests(unittest.TestCase):
         self.assertIn("reply in English", english_prompt)
         self.assertIn("Coding agent instructions", english_prompt)
 
+    def test_story_requests_include_corpus_guidance_in_both_languages(self) -> None:
+        italian_prompt = build_response_prompt(
+            "Raccontami una storia ambientata in montagna.",
+            "chat",
+            "",
+            "it",
+        )
+        english_prompt = build_response_prompt(
+            "Write a story set in the mountains.",
+            "chat",
+            "",
+            "en",
+        )
+        ordinary_prompt = build_response_prompt(
+            "Qual è la differenza tra una storia e un racconto?",
+            "chat",
+            "",
+            "it",
+        )
+
+        self.assertIn("parole del corpus", italian_prompt)
+        self.assertIn("corpus words", english_prompt)
+        self.assertIn("Original story", english_prompt)
+        self.assertNotIn("Storia originale:", ordinary_prompt)
+
     def test_greetings_and_introductions_use_the_detected_language(self) -> None:
         cases = (
             ("Hi", "Hello! I'm BitGenesis. How can I help?"),

@@ -147,6 +147,15 @@ includes both languages. This adds bilingual training examples but does not
 guarantee that the experimental model will consistently understand or answer
 in either language. The configuration still specifies Italian as its default;
 chat replies follow message-language detection and use English when unclear.
+The three Italian stories are also available as complete assistant responses
+in `conversazione_italiano.jsonl`; they do not have English counterparts.
+Story-writing requests receive a creative-writing instruction that asks the
+model to make an original story from vocabulary and ideas learned from its
+training stories, while respecting the requested details. The automatic effort
+setting gives story requests a larger response budget. The model learns from a
+snapshot of the data during training; after adding or changing examples, retrain
+it with `python -m bitgenesis.train --data-format conversations --steps 1000`
+before expecting the checkpoint to learn them.
 
 ## Learn Python programming
 
@@ -200,6 +209,18 @@ Place UTF-8 `.txt` files in `data/datasets/` (subdirectories are read too). Each
 file is treated as one document; files are loaded in a stable path order. Invalid
 UTF-8 files and a missing or empty corpus are reported as errors. Keep only
 training material you have the right to use.
+
+The Italian text corpus includes three original stories (`IT-STORY-0001.txt`
+through `IT-STORY-0003.txt`). Train on these and any other `.txt` documents in
+the dataset directory with the default text format:
+
+```console
+python -m bitgenesis.train --data-format text --steps 1000
+```
+
+Text and conversation training are separate: `--data-format conversations`
+continues to read only `.jsonl` files, while `--data-format text` reads only
+`.txt` files.
 
 The corpus utilities support a reproducible document-level training/validation
 split, keeping each document in one split. The standard-library BPE tokenizer

@@ -27,6 +27,16 @@ _GREETING_PATTERN = re.compile(
     r"good morning|good afternoon|good evening)"
     r"(?: bitgenesis)?[.!?… ]*"
 )
+_STORY_NOUN_PATTERN = re.compile(
+    r"\b(?:stori[ae]|raccont[oi]|favol[ae]|fiab[ae]|stor(?:y|ies)|"
+    r"tales?|fables?)\b"
+)
+_STORY_ACTION_PATTERN = re.compile(
+    r"\b(?:scriv\w*|raccont(?:ami|a|are|ate|ano|iamo)|invent\w*|"
+    r"crea(?:re|mi|te|no|iamo)?|compon\w*|narr\w*|"
+    r"gener\w*|famm\w*|fai|vorrei|voglio|write\w*|tell\w*|create\w*|"
+    r"compose\w*|generate\w*|make\w*|mi racconti)\b"
+)
 
 AGENT_INSTRUCTIONS: dict[AgentName, str] = {
     "chat": (
@@ -97,6 +107,22 @@ def build_response_prompt(
     request_label = (
         "User request" if language == "en" else "Richiesta dell'utente"
     )
+    normalized_message = unicodedata.normalize("NFKD", message.casefold())
+    normalized_message = "".join(
+        character
+        for character in normalized_message
+        if not unicodedata.combining(character)
+    )
+    if (
+        _STORY_NOUN_PATTERN.search(normalized_message)
+        and _STORY_ACTION_PATTERN.search(normalized_message)
+    ):
+        story_instruction = (
+            "Original story: use corpus words and follow the request."
+            if language == "en"
+            else "Storia originale: usa parole del corpus e segui la richiesta."
+        )
+        sections.append(story_instruction)
     sections.extend(
         (f"{request_label}: {message}", language_instruction(language))
     )
@@ -107,12 +133,12 @@ def local_user_rule(language: Language) -> tuple[str, str]:
     """Return a localized fixed-name instruction for local chat history."""
     if language == "en":
         return (
-            "Rule for this local chat: address the user as User.",
-            "In this local chat I will address the user as User.",
+            "Rule: address the user as User.",
+            "I will call you User.",
         )
     return (
-        "Regola per questa chat locale: chiama l'utente Utente.",
-        "In questa chat locale chiamerò l'utente Utente.",
+        "Regola: chiama l'utente Utente.",
+        "Ti chiamerò Utente.",
     )
 
 

@@ -191,8 +191,7 @@ class WebInterfaceTests(unittest.TestCase):
         self.assertIn("User request: What can I do?", prompt)
         self.assertIn("reply in English", prompt)
         self.assertIn(
-            ("Rule for this local chat: address the user as User.",
-             "In this local chat I will address the user as User."),
+            ("Rule: address the user as User.", "I will call you User."),
             chat_class.return_value.reply.call_args.args[1],
         )
 

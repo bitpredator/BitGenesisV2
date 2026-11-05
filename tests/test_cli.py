@@ -152,8 +152,8 @@ class RunChatTests(unittest.TestCase):
         self.assertIn("reply in English", prompt)
         self.assertIn(
             (
-                "Rule for this local chat: address the user as User.",
-                "In this local chat I will address the user as User.",
+                "Rule: address the user as User.",
+                "I will call you User.",
             ),
             chat_class.return_value.reply.call_args.args[1],
         )
@@ -205,8 +205,8 @@ class RunChatTests(unittest.TestCase):
             history_snapshots,
             [[
                 (
-                    "Regola per questa chat locale: chiama l'utente Utente.",
-                    "In questa chat locale chiamerò l'utente Utente.",
+                    "Regola: chiama l'utente Utente.",
+                    "Ti chiamerò Utente.",
                 )
             ]],
         )
@@ -242,8 +242,8 @@ class RunChatTests(unittest.TestCase):
         chat_class.assert_called_once_with(Path("model.pt"), Path("tokenizer.json"))
         self.assertEqual(chat.reply.call_count, 2)
         local_identity = (
-            "Regola per questa chat locale: chiama l'utente Utente.",
-            "In questa chat locale chiamerò l'utente Utente.",
+            "Regola: chiama l'utente Utente.",
+            "Ti chiamerò Utente.",
         )
         self.assertEqual(
             history_snapshots,
@@ -430,16 +430,15 @@ class RunChatTests(unittest.TestCase):
                 "Istruzioni permanenti del progetto da Genesis.md:\n"
                 "Usa Python 3.11.\n\nScrivi test.\n\n"
                 "Richiesta dell'utente: Grazie\n\n"
-                "Istruzione per la lingua: rispondi in italiano, la stessa "
-                "lingua del messaggio dell'utente."
+                "rispondi in italiano."
             ],
         )
         self.assertEqual(
             prompt_contexts[0][1],
             [
                 (
-                    "Regola per questa chat locale: chiama l'utente Utente.",
-                    "In questa chat locale chiamerò l'utente Utente.",
+                    "Regola: chiama l'utente Utente.",
+                    "Ti chiamerò Utente.",
                 )
             ],
         )
@@ -518,8 +517,8 @@ class RunChatTests(unittest.TestCase):
             )
 
         local_identity = (
-            "Regola per questa chat locale: chiama l'utente Utente.",
-            "In questa chat locale chiamerò l'utente Utente.",
+            "Regola: chiama l'utente Utente.",
+            "Ti chiamerò Utente.",
         )
         self.assertEqual(
             history_snapshots[0],
@@ -581,8 +580,8 @@ class RunChatTests(unittest.TestCase):
                 ("Riassunto della conversazione precedente", "L'utente ha salutato."),
                 ("Come stai?", "Sto bene"),
                 (
-                    "Regola per questa chat locale: chiama l'utente Utente.",
-                    "In questa chat locale chiamerò l'utente Utente.",
+                    "Regola: chiama l'utente Utente.",
+                    "Ti chiamerò Utente.",
                 ),
             ],
         )
@@ -630,8 +629,8 @@ class RunChatTests(unittest.TestCase):
                 ("Ciao, come stai?", "Salve"),
                 ("Come stai?", "Sto bene"),
                 (
-                    "Regola per questa chat locale: chiama l'utente Utente.",
-                    "In questa chat locale chiamerò l'utente Utente.",
+                    "Regola: chiama l'utente Utente.",
+                    "Ti chiamerò Utente.",
                 ),
             ],
         )
