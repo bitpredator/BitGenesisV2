@@ -22,6 +22,7 @@ _INTRODUCTION_PATTERNS = (
     re.compile(r"\bwhat can you do\b"),
     re.compile(r"\bwhat are your capabilities\b"),
 )
+_LICENSE_PATTERN = re.compile(r"\b(?:licenza|license|licensing)\b")
 _GREETING_PATTERN = re.compile(
     r"(?:ciao|salve|buongiorno|buonasera|buon pomeriggio|ehi|hey|hello|hi|"
     r"good morning|good afternoon|good evening)"
@@ -139,6 +140,32 @@ def local_user_rule(language: Language) -> tuple[str, str]:
     return (
         "Regola: chiama l'utente Utente.",
         "Ti chiamerò Utente.",
+    )
+
+
+def license_response(
+    prompt: str,
+    language: Language | None = None,
+) -> str | None:
+    """Return the project's license when the user asks about it."""
+    normalized = unicodedata.normalize("NFKD", prompt.casefold())
+    normalized = "".join(
+        character
+        for character in normalized
+        if not unicodedata.combining(character)
+    )
+    if not _LICENSE_PATTERN.search(normalized):
+        return None
+
+    selected_language = detect_language(prompt) if language is None else language
+    if selected_language == "en":
+        return (
+            "BitGenesis is distributed under the MIT License. "
+            "See the LICENSE file for the full text."
+        )
+    return (
+        "BitGenesis è distribuito con licenza MIT. "
+        "Consulta il file LICENSE per il testo completo."
     )
 
 

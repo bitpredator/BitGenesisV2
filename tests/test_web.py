@@ -133,6 +133,26 @@ class WebInterfaceTests(unittest.TestCase):
         self.assertEqual(len(self.app.history), 1)
         chat_class.assert_not_called()
 
+    def test_license_question_works_without_a_trained_model(self) -> None:
+        with patch("bitgenesis.generate.ConversationChat") as chat_class:
+            status, response = self.request(
+                "POST",
+                "/api/chat",
+                {
+                    "message": "What license is BitGenesis distributed under?",
+                    "effort": "auto",
+                    "agent": "chat",
+                },
+                origin=f"http://127.0.0.1:{self.server.server_port}",
+            )
+
+        self.assertEqual(status, 200)
+        self.assertFalse(response["generated"])
+        self.assertIn("MIT License", response["response"])
+        self.assertEqual(response["effort"], "non applicato")
+        self.assertEqual(len(self.app.history), 1)
+        chat_class.assert_not_called()
+
     def test_standalone_greeting_gets_a_deterministic_reply(self) -> None:
         self.model_path.parent.mkdir(parents=True)
         self.model_path.touch()

@@ -9,6 +9,7 @@ from bitgenesis.agents import (
     AgentName,
     build_response_prompt,
     local_user_rule,
+    license_response,
     self_introduction,
     simple_greeting,
 )
@@ -246,6 +247,11 @@ def run_chat(
             continue
         if message.strip():
             language = detect_language(message)
+            license = license_response(message, language)
+            if license is not None:
+                write_output(f"  BitGenesis > {license}")
+                history.append((message.strip(), license))
+                continue
             introduction = self_introduction(message, current_agent, language)
             if introduction is not None:
                 write_output(f"  BitGenesis > {introduction}")

@@ -15,6 +15,7 @@ import webbrowser
 from bitgenesis.agents import (
     AgentName,
     build_response_prompt,
+    license_response,
     local_user_rule,
     simple_greeting,
     self_introduction,
@@ -135,6 +136,15 @@ class WebApplication:
         selected_agent = cast(AgentName, agent)
         clean_message = message.strip()
         language = detect_language(clean_message)
+        license = license_response(clean_message, language)
+        if license is not None:
+            with self.lock:
+                self.history.append((message.strip(), license))
+            return {
+                "response": license,
+                "effort": "non applicato",
+                "generated": False,
+            }
         introduction = self_introduction(
             clean_message,
             selected_agent,

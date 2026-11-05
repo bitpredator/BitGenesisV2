@@ -2,6 +2,7 @@ import unittest
 
 from bitgenesis.agents import (
     build_response_prompt,
+    license_response,
     self_introduction,
     simple_greeting,
 )
@@ -96,6 +97,19 @@ class LanguageDetectionTests(unittest.TestCase):
             "Sono BitGenesis",
             self_introduction("Chi sei?", "chat") or "",
         )
+
+    def test_license_questions_get_a_factual_response_in_both_languages(self) -> None:
+        self.assertEqual(
+            license_response("Con che licenza è distribuito BitGenesis?"),
+            "BitGenesis è distribuito con licenza MIT. "
+            "Consulta il file LICENSE per il testo completo.",
+        )
+        self.assertEqual(
+            license_response("What license is BitGenesis distributed under?"),
+            "BitGenesis is distributed under the MIT License. "
+            "See the LICENSE file for the full text.",
+        )
+        self.assertIsNone(license_response("Come funziona BitGenesis?"))
 
 
 if __name__ == "__main__":
