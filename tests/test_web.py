@@ -21,6 +21,7 @@ class WebInterfaceTests(unittest.TestCase):
         self.tokenizer_path = root / "models" / "tokenizer.json"
         self.genesis_path = root / "Genesis.md"
         self.preferences_path = root / "Preferenze.md"
+        self.family_tree_path = root / "AlberoGenealogico.json"
         config = replace(
             load_config(),
             datasets_dir=root / "datasets",
@@ -36,6 +37,7 @@ class WebInterfaceTests(unittest.TestCase):
             effort="auto",
             genesis_path=self.genesis_path,
             preferences_path=self.preferences_path,
+            family_tree_path=self.family_tree_path,
         )
         self.server = LocalHTTPServer(("127.0.0.1", 0), self.app)
         self.addCleanup(self.server.server_close)
@@ -409,6 +411,125 @@ class WebInterfaceTests(unittest.TestCase):
         prompt = chat_class.return_value.reply.call_args.args[0]
         self.assertIn("Preferenze di lavoro dell'utente", prompt)
         self.assertIn("- Preferisco risposte concise.", prompt)
+
+    def test_chat_adds_explicit_family_relations_and_updates_svg(self) -> None:
+        status, response = self.request(
+            "POST",
+            "/api/chat",
+            {
+                "message": "Carlo è figlio di Anna.",
+                "effort": "auto",
+                "agent": "chat",
+            },
+            origin=f"http://127.0.0.1:{self.server.server_port}",
+        )
+
+        self.assertEqual(status, 200)
+        self.assertFalse(response["generated"])
+        self.assertIn("Ho aggiunto 1 relazione genealogica", response["response"])
+        tree_status, tree = self.request("GET", "/api/family-tree")
+        self.assertEqual(tree_status, 200)
+        self.assertEqual(
+            tree["parent_child"],
+            [{"parent": "Anna", "child": "Carlo"}],
+        )
+        self.assertTrue(self.family_tree_path.is_file())
+        self.assertTrue(self.family_tree_path.with_suffix(".svg").is_file())
+        svg_status, svg = self.request("GET", "/api/family-tree.svg")
+        self.assertEqual(svg_status, 200)
+        self.assertIn(
+            "Albero genealogico ordinato per generazioni",
+            svg if isinstance(svg, str) else "",
+        )
+
+    def test_saves_family_fact_without_swallowing_follow_up_question(self) -> None:
+        self.model_path.parent.mkdir(parents=True)
+        self.model_path.touch()
+        self.tokenizer_path.touch()
+        with patch("bitgenesis.generate.ConversationChat") as chat_class:
+            chat_class.return_value.reply.return_value = "Ha 42 anni."
+            status, response = self.request(
+                "POST",
+                "/api/chat",
+                {
+                    "message": "Carlo è figlio di Anna. Quanti anni ha?",
+                    "effort": "auto",
+                    "agent": "chat",
+                },
+                origin=f"http://127.0.0.1:{self.server.server_port}",
+            )
+
+        self.assertEqual(status, 200)
+        self.assertTrue(response["generated"])
+        self.assertEqual(response["response"], "Ha 42 anni.")
+        self.assertEqual(
+            self.app.family_tree()["parent_child"],
+            [{"parent": "Anna", "child": "Carlo"}],
+        )
+
+    def test_adds_and_removes_family_relations_through_api(self) -> None:
+        origin = f"http://127.0.0.1:{self.server.server_port}"
+        status, tree = self.request(
+            "POST",
+            "/api/family-tree",
+            {"action": "add", "parent": "Anna", "child": "Carlo"},
+            origin=origin,
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(tree["people"], ["Anna", "Carlo"])
+
+        status, tree = self.request(
+            "POST",
+            "/api/family-tree",
+            {"action": "remove", "parent": "Anna", "child": "Carlo"},
+            origin=origin,
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(tree["people"], [])
+        self.assertEqual(tree["parent_child"], [])
+
+    def test_rejects_family_tree_cycles(self) -> None:
+        origin = f"http://127.0.0.1:{self.server.server_port}"
+        self.request(
+            "POST",
+            "/api/family-tree",
+            {"action": "add", "parent": "Anna", "child": "Carlo"},
+            origin=origin,
+        )
+        self.request(
+            "POST",
+            "/api/family-tree",
+            {"action": "add", "parent": "Carlo", "child": "Luca"},
+            origin=origin,
+        )
+        status, response = self.request(
+            "POST",
+            "/api/family-tree",
+            {"action": "add", "parent": "Luca", "child": "Anna"},
+            origin=origin,
+        )
+
+        self.assertEqual(status, 400)
+        self.assertIn("ciclo", response["error"])
+
+    def test_rejects_cycles_in_family_facts_from_chat(self) -> None:
+        origin = f"http://127.0.0.1:{self.server.server_port}"
+        self.app.update_family_relation("add", "Anna", "Carlo")
+        self.app.update_family_relation("add", "Carlo", "Luca")
+
+        status, response = self.request(
+            "POST",
+            "/api/chat",
+            {
+                "message": "Luca è padre di Anna.",
+                "effort": "auto",
+                "agent": "chat",
+            },
+            origin=origin,
+        )
+
+        self.assertEqual(status, 400)
+        self.assertIn("ciclo", response["error"])
 
     def test_rejects_invalid_chat_settings(self) -> None:
         status, response = self.request(

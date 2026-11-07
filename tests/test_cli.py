@@ -40,6 +40,39 @@ class RunChatTests(unittest.TestCase):
         )
         self.assertEqual(output[-1], "  BitGenesis > A presto!")
 
+    def test_chat_saves_explicit_family_relations_and_shows_tree(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            tree_path = Path(temp_dir) / "AlberoGenealogico.json"
+            messages = iter(
+                [
+                    "Carlo è figlio di Anna.",
+                    "/albero mostra",
+                    "esci",
+                ]
+            )
+            output: list[str] = []
+
+            run_chat(
+                input_fn=lambda _prompt: next(messages),
+                output_fn=output.append,
+                family_tree_path=tree_path,
+            )
+
+            self.assertTrue(tree_path.is_file())
+            self.assertTrue(tree_path.with_suffix(".svg").is_file())
+            self.assertIn(
+                "  BitGenesis > Ho aggiunto 1 relazione genealogica esplicita. "
+                "Grafica: "
+                f"{tree_path.with_suffix('.svg')}",
+                output,
+            )
+            self.assertTrue(
+                any(
+                    "Anna è genitore di Carlo" in line
+                    for line in output
+                )
+            )
+
     def test_reports_missing_model_and_exits_in_italian(self) -> None:
         messages = iter(["Ciao BitGenesis", " esci "])
         output: list[str] = []

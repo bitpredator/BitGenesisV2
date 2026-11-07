@@ -41,6 +41,17 @@ h2 { margin-bottom: 0.7rem; font-size: 1rem; }
 .dot.ready { background: var(--accent); }
 .layout { display: grid; grid-template-columns: minmax(270px, 330px) minmax(0, 1fr); gap: 1rem; align-items: start; }
 aside, .chat-panel { border: 1px solid var(--border); border-radius: 1rem; background: var(--panel); }
+.family-tree-panel { margin-top: 1rem; padding: 1rem; border: 1px solid var(--border); border-radius: 1rem; background: var(--panel); }
+.tree-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
+.tree-heading h2 { margin-bottom: 0.4rem; }
+.tree-heading a { color: var(--accent); }
+.tree-form { display: grid; grid-template-columns: 1fr 1fr auto; align-items: end; gap: 0.7rem; }
+.tree-form label { margin: 0; }
+.family-tree-visualization { margin-top: 0.75rem; overflow: auto; border: 1px solid var(--border); border-radius: 0.75rem; }
+.family-tree-visualization img { display: block; min-width: 640px; max-width: 100%; height: auto; }
+.family-tree-relations { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 0.5rem; margin-top: 0.7rem; }
+.family-tree-relation { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; padding: 0.45rem 0.6rem; border: 1px solid var(--border); border-radius: 0.6rem; overflow-wrap: anywhere; }
+.family-tree-relation button { min-height: 34px; padding: 0.3rem 0.6rem; }
 aside { padding: 1rem; }
 .section + .section { margin-top: 1.3rem; padding-top: 1.2rem; border-top: 1px solid var(--border); }
 label { display: block; margin: 0.9rem 0 0.35rem; color: var(--muted); font-size: 0.85rem; }
@@ -76,4 +87,6 @@ textarea { min-height: 110px; resize: vertical; }
   .layout { grid-template-columns: 1fr; }
   .chat-panel { min-height: 65vh; }
   header { align-items: flex-start; flex-direction: column; }
+  .tree-heading { flex-direction: column; }
+  .tree-form { grid-template-columns: 1fr; }
 }

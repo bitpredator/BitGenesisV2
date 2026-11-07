@@ -91,6 +91,31 @@
         </div>
       </section>
     </div>
+    <section class="family-tree-panel" aria-label="Albero genealogico">
+      <div class="tree-heading">
+        <div>
+          <h2>Albero genealogico</h2>
+          <p class="hint">Aggiungi le parentele in chat, per esempio “Luca è padre di Anna”, oppure inseriscile qui. La grafica si aggiorna per generazioni.</p>
+        </div>
+        <a id="download-family-tree" href="/api/family-tree.svg" download="AlberoGenealogico.svg">Scarica grafica SVG</a>
+      </div>
+      <div class="tree-form">
+        <div>
+          <label for="tree-parent">Genitore</label>
+          <input id="tree-parent" maxlength="80" placeholder="Es. Luca">
+        </div>
+        <div>
+          <label for="tree-child">Figlio/a</label>
+          <input id="tree-child" maxlength="80" placeholder="Es. Anna">
+        </div>
+        <button id="add-family-relation" type="button">Aggiungi relazione</button>
+      </div>
+      <p id="family-tree-status" class="hint" role="status">Caricamento albero...</p>
+      <div class="family-tree-visualization">
+        <img id="family-tree-image" alt="Albero genealogico ordinato per generazioni">
+      </div>
+      <div id="family-tree-relations" class="family-tree-relations"></div>
+    </section>
   </main>
   <script>
     const messages = document.querySelector("#messages");
@@ -101,6 +126,9 @@
     const storedInstructions = document.querySelector("#stored-instructions");
     const preferencesInput = document.querySelector("#preferences-input");
     const storedPreferences = document.querySelector("#stored-preferences");
+    const familyTreeStatus = document.querySelector("#family-tree-status");
+    const familyTreeImage = document.querySelector("#family-tree-image");
+    const familyTreeRelations = document.querySelector("#family-tree-relations");
 
     async function request(path, options = {}) {
       const response = await fetch(path, {
@@ -171,6 +199,7 @@
           : "BitGenesis · risposta informativa";
         addMessage("assistant", result.response, label);
         await refreshPreferences();
+        await refreshFamilyTree();
       } catch (error) {
         chatError.textContent = error.message;
       } finally {
@@ -237,6 +266,60 @@
     document.querySelector("#append-preferences").addEventListener("click", () => savePreferences("append"));
     document.querySelector("#replace-preferences").addEventListener("click", () => savePreferences("replace"));
 
+    async function refreshFamilyTree() {
+      const tree = await request("/api/family-tree");
+      familyTreeImage.src = `/api/family-tree.svg?updated=${Date.now()}`;
+      familyTreeRelations.replaceChildren();
+      const relations = tree.parent_child || [];
+      familyTreeStatus.textContent = relations.length
+        ? `${tree.people.length} persone · ${relations.length} relazioni esplicite`
+        : "Nessuna relazione salvata. BitGenesis non deduce legami non dichiarati.";
+      for (const relation of relations) {
+        const row = document.createElement("div");
+        row.className = "family-tree-relation";
+        const description = document.createElement("span");
+        description.textContent = `${relation.parent} → ${relation.child}`;
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.textContent = "Rimuovi";
+        remove.addEventListener("click", async () => {
+          try {
+            await request("/api/family-tree", {
+              method: "POST",
+              body: JSON.stringify({
+                action: "remove",
+                parent: relation.parent,
+                child: relation.child,
+              }),
+            });
+            await refreshFamilyTree();
+          } catch (error) {
+            familyTreeStatus.textContent = error.message;
+          }
+        });
+        row.append(description, remove);
+        familyTreeRelations.append(row);
+      }
+    }
+
+    document.querySelector("#add-family-relation").addEventListener("click", async () => {
+      try {
+        await request("/api/family-tree", {
+          method: "POST",
+          body: JSON.stringify({
+            action: "add",
+            parent: document.querySelector("#tree-parent").value,
+            child: document.querySelector("#tree-child").value,
+          }),
+        });
+        document.querySelector("#tree-parent").value = "";
+        document.querySelector("#tree-child").value = "";
+        await refreshFamilyTree();
+      } catch (error) {
+        familyTreeStatus.textContent = error.message;
+      }
+    });
+
     trainButton.addEventListener("click", async () => {
       const steps = Number(document.querySelector("#steps").value);
       trainButton.disabled = true;
@@ -259,6 +342,8 @@
       .catch((error) => { chatError.textContent = error.message; });
     refreshPreferences()
       .catch((error) => { chatError.textContent = error.message; });
+    refreshFamilyTree()
+      .catch((error) => { familyTreeStatus.textContent = error.message; });
     refreshStatus();
     window.setInterval(refreshStatus, 2000);
   </script>

@@ -28,6 +28,15 @@ from bitgenesis.effort import (
     effort_token_budget,
     is_effort_level,
 )
+from bitgenesis.family_tree import (
+    add_parent_child,
+    is_family_tree_statement,
+    parse_family_relations,
+    read_family_tree,
+    remove_parent_child,
+    render_family_tree_svg,
+    save_family_tree,
+)
 from bitgenesis.genesis import read_instructions, update_instructions
 from bitgenesis.language import detect_language
 from bitgenesis.preferences import (
@@ -67,6 +76,7 @@ class WebApplication:
         effort: EffortLevel,
         genesis_path: Path | None = None,
         preferences_path: Path | None = None,
+        family_tree_path: Path | None = None,
     ) -> None:
         self.config = config
         self.model_path = Path(model_path)
@@ -83,6 +93,11 @@ class WebApplication:
             Path.cwd() / "Preferenze.md"
             if preferences_path is None
             else Path(preferences_path)
+        )
+        self.family_tree_path = (
+            Path.cwd() / "AlberoGenealogico.json"
+            if family_tree_path is None
+            else Path(family_tree_path)
         )
         self.history: list[tuple[str, str]] = []
         self.chat: ConversationChat | None = None
@@ -161,6 +176,45 @@ class WebApplication:
             ) from error
         return self.preferences()
 
+    def family_tree(self) -> dict[str, object]:
+        try:
+            with self.lock:
+                return read_family_tree(self.family_tree_path)
+        except (OSError, UnicodeError, ValueError) as error:
+            raise WebRequestError(
+                500, f"Impossibile leggere l'albero genealogico: {error}"
+            ) from error
+
+    def update_family_relation(
+        self,
+        action: str,
+        parent: str,
+        child: str,
+    ) -> dict[str, object]:
+        if action not in {"add", "remove"}:
+            raise WebRequestError(400, "Azione per l'albero genealogico non valida.")
+        try:
+            with self.lock:
+                tree = read_family_tree(self.family_tree_path)
+                changed = (
+                    add_parent_child(tree, parent, child)
+                    if action == "add"
+                    else remove_parent_child(tree, parent, child)
+                )
+                if changed:
+                    save_family_tree(self.family_tree_path, tree)
+                return tree
+        except ValueError as error:
+            raise WebRequestError(400, f"Relazione non valida: {error}") from error
+        except (OSError, UnicodeError) as error:
+            raise WebRequestError(
+                500, f"Impossibile aggiornare l'albero genealogico: {error}"
+            ) from error
+
+    def family_tree_svg(self) -> str:
+        tree = self.family_tree()
+        return render_family_tree_svg(tree)
+
     def reset_chat(self) -> None:
         with self.lock:
             self.history.clear()
@@ -181,6 +235,53 @@ class WebApplication:
         selected_agent = cast(AgentName, agent)
         clean_message = message.strip()
         language = detect_language(clean_message)
+        family_relations = parse_family_relations(clean_message)
+        if family_relations:
+            with self.lock:
+                try:
+                    tree = read_family_tree(self.family_tree_path)
+                except (OSError, UnicodeError, ValueError) as error:
+                    raise WebRequestError(
+                        500, f"Impossibile leggere l'albero genealogico: {error}"
+                    ) from error
+                try:
+                    added_relations = [
+                        (parent, child)
+                        for parent, child in family_relations
+                        if add_parent_child(tree, parent, child)
+                    ]
+                    if added_relations:
+                        save_family_tree(self.family_tree_path, tree)
+                except ValueError as error:
+                    raise WebRequestError(
+                        400, f"Relazione non valida: {error}"
+                    ) from error
+                except OSError as error:
+                    raise WebRequestError(
+                        500,
+                        f"Impossibile aggiornare l'albero genealogico: {error}",
+                    ) from error
+            if is_family_tree_statement(clean_message):
+                response = (
+                    f"Ho aggiunto {len(added_relations)} "
+                    f"{'relazione genealogica esplicita' if len(added_relations) == 1 else 'relazioni genealogiche esplicite'}."
+                    if language == "it"
+                    else f"I added {len(added_relations)} explicit "
+                    f"{'family relationship' if len(added_relations) == 1 else 'family relationships'}."
+                )
+                if not added_relations:
+                    response = (
+                        "Queste relazioni sono già presenti nell'albero genealogico."
+                        if language == "it"
+                        else "These relationships are already in the family tree."
+                    )
+                with self.lock:
+                    self.history.append((clean_message, response))
+                return {
+                    "response": response,
+                    "effort": "non applicato",
+                    "generated": False,
+                }
         preference = detect_work_preference(clean_message)
         if preference is not None:
             try:
@@ -501,6 +602,23 @@ class LocalRequestHandler(BaseHTTPRequestHandler):
                 )
             except WebRequestError as error:
                 self._send_json(error.status, {"error": str(error)})
+        elif route == "/api/family-tree":
+            try:
+                self._send_json(200, self.server.app.family_tree())
+            except WebRequestError as error:
+                self._send_json(error.status, {"error": str(error)})
+        elif route == "/api/family-tree.svg":
+            try:
+                svg = self.server.app.family_tree_svg().encode("utf-8")
+            except WebRequestError as error:
+                self._send_json(error.status, {"error": str(error)})
+                return
+            self.send_response(200)
+            self.send_header("Content-Type", "image/svg+xml; charset=utf-8")
+            self.send_header("Content-Length", str(len(svg)))
+            self._send_security_headers()
+            self.end_headers()
+            self.wfile.write(svg)
         else:
             self._send_json(404, {"error": "Pagina non trovata."})
 
@@ -538,6 +656,22 @@ class LocalRequestHandler(BaseHTTPRequestHandler):
                 result = {
                     "preferences": self.server.app.save_preferences(action, text)
                 }
+            elif route == "/api/family-tree":
+                action = body.get("action")
+                parent = body.get("parent")
+                child = body.get("child")
+                if not all(
+                    isinstance(value, str)
+                    for value in (action, parent, child)
+                ):
+                    raise WebRequestError(
+                        400, "Specifica un'azione, un genitore e un figlio."
+                    )
+                result = self.server.app.update_family_relation(
+                    action,
+                    parent,
+                    child,
+                )
             else:
                 self._send_json(404, {"error": "Endpoint non trovato."})
                 return

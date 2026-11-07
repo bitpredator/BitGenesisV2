@@ -22,6 +22,14 @@ from bitgenesis.effort import (
     effort_token_budget,
     is_effort_level,
 )
+from bitgenesis.family_tree import (
+    add_parent_child,
+    is_family_tree_statement,
+    parse_family_relations,
+    read_family_tree,
+    remove_parent_child,
+    save_family_tree,
+)
 from bitgenesis.genesis import read_instructions, update_instructions
 from bitgenesis.generate import (
     CompactionError,
@@ -70,6 +78,8 @@ def _write_welcome(
     )
     preference_hint = "/preferenze gestisce le preferenze di lavoro."
     write_output(f"  |{preference_hint.center(_BANNER_WIDTH)}|")
+    tree_hint = "/albero mostra gestisce l'albero genealogico."
+    write_output(f"  |{tree_hint.center(_BANNER_WIDTH)}|")
     write_output(f"  |{'/agente chat|coding seleziona il profilo.'.center(_BANNER_WIDTH)}|")
     effort_hint = "/impegno auto|minimo|medio|alto cambia il livello."
     write_output(f"  |{effort_hint.center(_BANNER_WIDTH)}|")
@@ -94,6 +104,7 @@ def run_chat(
     genesis_path: Path | None = None,
     knowledge_directory: Path | None = None,
     preferences_path: Path | None = None,
+    family_tree_path: Path | None = None,
 ) -> None:
     """Run the terminal chat using a saved local model when available."""
     read_input = input if input_fn is None else input_fn
@@ -110,6 +121,11 @@ def run_chat(
         Path.cwd() / "Preferenze.md"
         if preferences_path is None
         else Path(preferences_path)
+    )
+    saved_family_tree_path = (
+        Path.cwd() / "AlberoGenealogico.json"
+        if family_tree_path is None
+        else Path(family_tree_path)
     )
 
     model_files_found = (
@@ -255,6 +271,65 @@ def run_chat(
                     "/preferenze sostituisci <testo>."
                 )
             continue
+        if command and command[0] == "/albero":
+            parts = message.strip().split(maxsplit=2)
+            action = parts[1].casefold() if len(parts) > 1 else "mostra"
+            try:
+                family_tree = read_family_tree(saved_family_tree_path)
+                if action == "mostra" and len(parts) in {1, 2}:
+                    relations = family_tree["parent_child"]
+                    summary = (
+                        "\n".join(
+                            f"- {relation['parent']} è genitore di "
+                            f"{relation['child']}"
+                            for relation in relations
+                        )
+                        if relations
+                        else "Non ci sono ancora relazioni salvate."
+                    )
+                    write_output(
+                        f"  BitGenesis > Albero genealogico "
+                        f"({saved_family_tree_path}):\n{summary}\n"
+                        f"Grafica: {saved_family_tree_path.with_suffix('.svg')}"
+                    )
+                elif action in {"aggiungi", "rimuovi"} and len(parts) == 3:
+                    names = parts[2].split("->", maxsplit=1)
+                    if len(names) != 2:
+                        raise ValueError(
+                            "Specifica la relazione come <genitore> -> <figlio>."
+                        )
+                    parent, child = names[0].strip(), names[1].strip()
+                    changed = (
+                        add_parent_child(family_tree, parent, child)
+                        if action == "aggiungi"
+                        else remove_parent_child(family_tree, parent, child)
+                    )
+                    if changed:
+                        save_family_tree(saved_family_tree_path, family_tree)
+                    result = (
+                        "Relazione salvata."
+                        if action == "aggiungi" and changed
+                        else "Relazione già presente."
+                        if action == "aggiungi"
+                        else "Relazione rimossa."
+                        if changed
+                        else "Relazione non trovata."
+                    )
+                    write_output(
+                        f"  BitGenesis > {result} Grafica: "
+                        f"{saved_family_tree_path.with_suffix('.svg')}"
+                    )
+                else:
+                    write_output(
+                        "  BitGenesis > Usa /albero mostra, "
+                        "/albero aggiungi <genitore> -> <figlio> oppure "
+                        "/albero rimuovi <genitore> -> <figlio>."
+                    )
+            except (OSError, UnicodeError, ValueError) as error:
+                write_output(
+                    f"  BitGenesis > Albero genealogico non aggiornato: {error}"
+                )
+            continue
         if message.strip().casefold() == "/compact":
             if not history:
                 write_output(
@@ -311,6 +386,43 @@ def run_chat(
             continue
         if message.strip():
             language = detect_language(message)
+            family_relations = parse_family_relations(message)
+            if family_relations:
+                try:
+                    family_tree = read_family_tree(saved_family_tree_path)
+                    added_relations = [
+                        (parent, child)
+                        for parent, child in family_relations
+                        if add_parent_child(family_tree, parent, child)
+                    ]
+                    if added_relations:
+                        save_family_tree(saved_family_tree_path, family_tree)
+                except (OSError, UnicodeError, ValueError) as error:
+                    write_output(
+                        f"  BitGenesis > Non riesco ad aggiornare l'albero "
+                        f"genealogico: {error}"
+                    )
+                    continue
+                if is_family_tree_statement(message):
+                    response = (
+                        f"Ho aggiunto {len(added_relations)} "
+                        f"{'relazione genealogica esplicita' if len(added_relations) == 1 else 'relazioni genealogiche esplicite'}. "
+                        f"Grafica: {saved_family_tree_path.with_suffix('.svg')}"
+                        if added_relations
+                        else "Queste relazioni sono già presenti "
+                        "nell'albero genealogico."
+                    )
+                    if language == "en":
+                        response = (
+                            f"I added {len(added_relations)} explicit "
+                            f"{'family relationship' if len(added_relations) == 1 else 'family relationships'}. "
+                            f"Graphic: {saved_family_tree_path.with_suffix('.svg')}"
+                            if added_relations
+                            else "These relationships are already in the family tree."
+                        )
+                    write_output(f"  BitGenesis > {response}")
+                    history.append((message.strip(), response))
+                    continue
             preference = detect_work_preference(message)
             if preference is not None:
                 try:

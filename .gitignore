@@ -40,6 +40,8 @@ data/datasets/*
 data/models/
 NEXT_STEPS.md
 Preferenze.md
+AlberoGenealogico.json
+AlberoGenealogico.svg
 
 # Build output and logs
 build/
