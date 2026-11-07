@@ -95,18 +95,26 @@
       <div class="tree-heading">
         <div>
           <h2>Albero genealogico</h2>
-          <p class="hint">Aggiungi le parentele in chat, per esempio “Luca è padre di Anna”, oppure inseriscile qui. La grafica si aggiorna per generazioni.</p>
+          <p class="hint">Dichiara le relazioni in chat oppure aggiungile qui. I dati dell'albero restano nei file locali.</p>
         </div>
         <a id="download-family-tree" href="/api/family-tree.svg" download="AlberoGenealogico.svg">Scarica grafica SVG</a>
       </div>
       <div class="tree-form">
         <div>
-          <label for="tree-parent">Genitore</label>
-          <input id="tree-parent" maxlength="80" placeholder="Es. Luca">
+          <label for="tree-parent">Prima persona</label>
+          <input id="tree-parent" maxlength="80" placeholder="Persona di test A">
         </div>
         <div>
-          <label for="tree-child">Figlio/a</label>
-          <input id="tree-child" maxlength="80" placeholder="Es. Anna">
+          <label for="tree-child">Seconda persona</label>
+          <input id="tree-child" maxlength="80" placeholder="Persona di test B">
+        </div>
+        <div>
+          <label for="tree-relation-type">Relazione</label>
+          <select id="tree-relation-type">
+            <option value="parent_child">Genitore → figlio/a</option>
+            <option value="sibling">Fratelli/sorelle</option>
+            <option value="spouse">Coniugi</option>
+          </select>
         </div>
         <button id="add-family-relation" type="button">Aggiungi relazione</button>
       </div>
@@ -270,7 +278,26 @@
       const tree = await request("/api/family-tree");
       familyTreeImage.src = `/api/family-tree.svg?updated=${Date.now()}`;
       familyTreeRelations.replaceChildren();
-      const relations = tree.parent_child || [];
+      const relations = [
+        ...(tree.parent_child || []).map((relation) => ({
+          relation_type: "parent_child",
+          first: relation.parent,
+          second: relation.child,
+          description: `${relation.parent} → ${relation.child}`,
+        })),
+        ...(tree.sibling_pairs || []).map((pair) => ({
+          relation_type: "sibling",
+          first: pair.first,
+          second: pair.second,
+          description: `${pair.first} ↔ ${pair.second} (fratelli/sorelle)`,
+        })),
+        ...(tree.spouse_pairs || []).map((pair) => ({
+          relation_type: "spouse",
+          first: pair.first,
+          second: pair.second,
+          description: `${pair.first} ↔ ${pair.second} (coniugi)`,
+        })),
+      ];
       familyTreeStatus.textContent = relations.length
         ? `${tree.people.length} persone · ${relations.length} relazioni esplicite`
         : "Nessuna relazione salvata. BitGenesis non deduce legami non dichiarati.";
@@ -278,7 +305,7 @@
         const row = document.createElement("div");
         row.className = "family-tree-relation";
         const description = document.createElement("span");
-        description.textContent = `${relation.parent} → ${relation.child}`;
+        description.textContent = relation.description;
         const remove = document.createElement("button");
         remove.type = "button";
         remove.textContent = "Rimuovi";
@@ -288,8 +315,9 @@
               method: "POST",
               body: JSON.stringify({
                 action: "remove",
-                parent: relation.parent,
-                child: relation.child,
+                parent: relation.first,
+                child: relation.second,
+                relation_type: relation.relation_type,
               }),
             });
             await refreshFamilyTree();
@@ -310,6 +338,7 @@
             action: "add",
             parent: document.querySelector("#tree-parent").value,
             child: document.querySelector("#tree-child").value,
+            relation_type: document.querySelector("#tree-relation-type").value,
           }),
         });
         document.querySelector("#tree-parent").value = "";

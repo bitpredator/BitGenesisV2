@@ -23,11 +23,17 @@ from bitgenesis.effort import (
     is_effort_level,
 )
 from bitgenesis.family_tree import (
+    add_spouse_pair,
+    add_sibling_pair,
     add_parent_child,
     is_family_tree_statement,
     parse_family_relations,
+    parse_spouse_relations,
+    parse_sibling_relations,
     read_family_tree,
     remove_parent_child,
+    remove_sibling_pair,
+    remove_spouse_pair,
     save_family_tree,
 )
 from bitgenesis.genesis import read_instructions, update_instructions
@@ -278,13 +284,24 @@ def run_chat(
                 family_tree = read_family_tree(saved_family_tree_path)
                 if action == "mostra" and len(parts) in {1, 2}:
                     relations = family_tree["parent_child"]
+                    siblings = family_tree["sibling_pairs"]
+                    spouses = family_tree["spouse_pairs"]
+                    summary_lines = [
+                        f"- {relation['parent']} è genitore di "
+                        f"{relation['child']}"
+                        for relation in relations
+                    ]
+                    summary_lines.extend(
+                        f"- {pair['first']} e {pair['second']} sono fratelli/sorelle"
+                        for pair in siblings
+                    )
+                    summary_lines.extend(
+                        f"- {pair['first']} e {pair['second']} sono coniugi"
+                        for pair in spouses
+                    )
                     summary = (
-                        "\n".join(
-                            f"- {relation['parent']} è genitore di "
-                            f"{relation['child']}"
-                            for relation in relations
-                        )
-                        if relations
+                        "\n".join(summary_lines)
+                        if summary_lines
                         else "Non ci sono ancora relazioni salvate."
                     )
                     write_output(
@@ -298,12 +315,39 @@ def run_chat(
                         raise ValueError(
                             "Specifica la relazione come <genitore> -> <figlio>."
                         )
-                    parent, child = names[0].strip(), names[1].strip()
-                    changed = (
-                        add_parent_child(family_tree, parent, child)
-                        if action == "aggiungi"
-                        else remove_parent_child(family_tree, parent, child)
+                    first = names[0].strip()
+                    second = names[1].strip()
+                    prefix = first.casefold()
+                    relation_type = (
+                        "sibling"
+                        if prefix.startswith("fratelli ")
+                        else "spouse"
+                        if prefix.startswith("coniugi ")
+                        else "parent_child"
                     )
+                    if relation_type in {"sibling", "spouse"}:
+                        first = first.split(maxsplit=1)[1]
+                        add_pair = (
+                            add_spouse_pair
+                            if relation_type == "spouse"
+                            else add_sibling_pair
+                        )
+                        remove_pair = (
+                            remove_spouse_pair
+                            if relation_type == "spouse"
+                            else remove_sibling_pair
+                        )
+                        changed = (
+                            add_pair(family_tree, first, second)
+                            if action == "aggiungi"
+                            else remove_pair(family_tree, first, second)
+                        )
+                    else:
+                        changed = (
+                            add_parent_child(family_tree, first, second)
+                            if action == "aggiungi"
+                            else remove_parent_child(family_tree, first, second)
+                        )
                     if changed:
                         save_family_tree(saved_family_tree_path, family_tree)
                     result = (
@@ -323,7 +367,10 @@ def run_chat(
                     write_output(
                         "  BitGenesis > Usa /albero mostra, "
                         "/albero aggiungi <genitore> -> <figlio> oppure "
-                        "/albero rimuovi <genitore> -> <figlio>."
+                        "/albero rimuovi <genitore> -> <figlio>; "
+                        "per i fratelli usa /albero aggiungi fratelli "
+                        "<nome> -> <nome>, per i coniugi usa "
+                        "/albero aggiungi coniugi <nome> -> <nome>."
                     )
             except (OSError, UnicodeError, ValueError) as error:
                 write_output(
@@ -387,7 +434,9 @@ def run_chat(
         if message.strip():
             language = detect_language(message)
             family_relations = parse_family_relations(message)
-            if family_relations:
+            sibling_relations = parse_sibling_relations(message)
+            spouse_relations = parse_spouse_relations(message)
+            if family_relations or sibling_relations or spouse_relations:
                 try:
                     family_tree = read_family_tree(saved_family_tree_path)
                     added_relations = [
@@ -395,7 +444,17 @@ def run_chat(
                         for parent, child in family_relations
                         if add_parent_child(family_tree, parent, child)
                     ]
-                    if added_relations:
+                    added_siblings = [
+                        (first, second)
+                        for first, second in sibling_relations
+                        if add_sibling_pair(family_tree, first, second)
+                    ]
+                    added_spouses = [
+                        (first, second)
+                        for first, second in spouse_relations
+                        if add_spouse_pair(family_tree, first, second)
+                    ]
+                    if added_relations or added_siblings or added_spouses:
                         save_family_tree(saved_family_tree_path, family_tree)
                 except (OSError, UnicodeError, ValueError) as error:
                     write_output(
@@ -404,20 +463,23 @@ def run_chat(
                     )
                     continue
                 if is_family_tree_statement(message):
+                    added_count = (
+                        len(added_relations) + len(added_siblings) + len(added_spouses)
+                    )
                     response = (
-                        f"Ho aggiunto {len(added_relations)} "
-                        f"{'relazione genealogica esplicita' if len(added_relations) == 1 else 'relazioni genealogiche esplicite'}. "
+                        f"Ho aggiunto {added_count} "
+                        f"{'relazione genealogica esplicita' if added_count == 1 else 'relazioni genealogiche esplicite'}. "
                         f"Grafica: {saved_family_tree_path.with_suffix('.svg')}"
-                        if added_relations
+                        if added_count
                         else "Queste relazioni sono già presenti "
                         "nell'albero genealogico."
                     )
                     if language == "en":
                         response = (
-                            f"I added {len(added_relations)} explicit "
-                            f"{'family relationship' if len(added_relations) == 1 else 'family relationships'}. "
+                            f"I added {added_count} explicit "
+                            f"{'family relationship' if added_count == 1 else 'family relationships'}. "
                             f"Graphic: {saved_family_tree_path.with_suffix('.svg')}"
-                            if added_relations
+                            if added_count
                             else "These relationships are already in the family tree."
                         )
                     write_output(f"  BitGenesis > {response}")

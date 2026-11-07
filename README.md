@@ -92,16 +92,20 @@ terminal, or the Preferenze di lavoro panel in the web interface to review and
 edit them. The file is ignored by Git because it may contain personal
 preferences.
 
-The chat can also build a local family tree from explicit parent-child
-statements in Italian or English, for example `Carlo è figlio di Anna.`,
-`Anna è la madre di Carlo.`, or `My father is Marco.`. Each accepted statement
-updates `AlberoGenealogico.json` and its generation-ordered
+The chat can also build a local family tree from explicit relationship
+statements in Italian or English. Each accepted statement updates
+`AlberoGenealogico.json` and its generation-ordered
 `AlberoGenealogico.svg`; the web interface displays the graphic as it changes.
-Use its form to add relationships or remove an incorrect link. In the terminal,
+Siblings and spouses are placed at the same generation and shown with separate connectors.
+Use its form to add either relation or remove an incorrect link. In the terminal,
 use `/albero mostra`, `/albero aggiungi <genitore> -> <figlio>`, or
-`/albero rimuovi <genitore> -> <figlio>`. BitGenesis only records relationships
-stated explicitly and rejects links that would create a cycle. These personal
-files are ignored by Git.
+`/albero rimuovi <genitore> -> <figlio>`; sibling pairs can be managed with
+`/albero aggiungi fratelli <nome> -> <nome>` and
+`/albero rimuovi fratelli <nome> -> <nome>`, and spouses with
+`/albero aggiungi coniugi <nome> -> <nome>` and
+`/albero rimuovi coniugi <nome> -> <nome>`. BitGenesis only records
+relationships stated explicitly and rejects links that would create a cycle.
+These personal files are ignored by Git.
 
 In local mode BitGenesis addresses the person using it as `Utente` in Italian
 and `User` in English; there is no local nickname setting. Choosing a personal

@@ -45,7 +45,7 @@ class RunChatTests(unittest.TestCase):
             tree_path = Path(temp_dir) / "AlberoGenealogico.json"
             messages = iter(
                 [
-                    "Carlo è figlio di Anna.",
+                    "TestPersonB è figlio di TestPersonA.",
                     "/albero mostra",
                     "esci",
                 ]
@@ -68,7 +68,61 @@ class RunChatTests(unittest.TestCase):
             )
             self.assertTrue(
                 any(
-                    "Anna è genitore di Carlo" in line
+                    "TestPersonA è genitore di TestPersonB" in line
+                    for line in output
+                )
+            )
+
+    def test_chat_saves_sibling_relationships_and_shows_tree(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            tree_path = Path(temp_dir) / "AlberoGenealogico.json"
+            messages = iter(
+                [
+                    "TestPersonA e TestPersonB sono fratelli.",
+                    "/albero mostra",
+                    "esci",
+                ]
+            )
+            output: list[str] = []
+
+            run_chat(
+                input_fn=lambda _prompt: next(messages),
+                output_fn=output.append,
+                family_tree_path=tree_path,
+            )
+
+            self.assertTrue(tree_path.is_file())
+            self.assertTrue(tree_path.with_suffix(".svg").is_file())
+            self.assertTrue(
+                any(
+                    "TestPersonA e TestPersonB sono fratelli/sorelle" in line
+                    for line in output
+                )
+            )
+
+    def test_chat_saves_spouse_relationships_and_shows_tree(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            tree_path = Path(temp_dir) / "AlberoGenealogico.json"
+            messages = iter(
+                [
+                    "TestPersonH e TestPersonK sono marito e moglie",
+                    "/albero mostra",
+                    "esci",
+                ]
+            )
+            output: list[str] = []
+
+            run_chat(
+                input_fn=lambda _prompt: next(messages),
+                output_fn=output.append,
+                family_tree_path=tree_path,
+            )
+
+            self.assertTrue(tree_path.is_file())
+            self.assertTrue(tree_path.with_suffix(".svg").is_file())
+            self.assertTrue(
+                any(
+                    "TestPersonH e TestPersonK sono coniugi" in line
                     for line in output
                 )
             )

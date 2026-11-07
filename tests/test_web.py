@@ -417,7 +417,7 @@ class WebInterfaceTests(unittest.TestCase):
             "POST",
             "/api/chat",
             {
-                "message": "Carlo è figlio di Anna.",
+                "message": "TestPersonB è figlio di TestPersonA.",
                 "effort": "auto",
                 "agent": "chat",
             },
@@ -431,7 +431,7 @@ class WebInterfaceTests(unittest.TestCase):
         self.assertEqual(tree_status, 200)
         self.assertEqual(
             tree["parent_child"],
-            [{"parent": "Anna", "child": "Carlo"}],
+            [{"parent": "TestPersonA", "child": "TestPersonB"}],
         )
         self.assertTrue(self.family_tree_path.is_file())
         self.assertTrue(self.family_tree_path.with_suffix(".svg").is_file())
@@ -440,6 +440,81 @@ class WebInterfaceTests(unittest.TestCase):
         self.assertIn(
             "Albero genealogico ordinato per generazioni",
             svg if isinstance(svg, str) else "",
+        )
+
+    def test_chat_adds_sibling_relationships_and_updates_svg(self) -> None:
+        status, response = self.request(
+            "POST",
+            "/api/chat",
+            {
+                "message": "TestPersonA e TestPersonB sono fratelli.",
+                "effort": "auto",
+                "agent": "chat",
+            },
+            origin=f"http://127.0.0.1:{self.server.server_port}",
+        )
+
+        self.assertEqual(status, 200)
+        self.assertFalse(response["generated"])
+        self.assertIn("Ho aggiunto 1 relazione genealogica", response["response"])
+        tree_status, tree = self.request("GET", "/api/family-tree")
+        self.assertEqual(tree_status, 200)
+        self.assertEqual(
+            tree["sibling_pairs"],
+            [{"first": "TestPersonA", "second": "TestPersonB"}],
+        )
+        svg_status, svg = self.request("GET", "/api/family-tree.svg")
+        self.assertEqual(svg_status, 200)
+        self.assertIn('stroke="#91a9ff"', svg)
+
+    def test_chat_adds_spouse_relationships_and_updates_svg(self) -> None:
+        status, response = self.request(
+            "POST",
+            "/api/chat",
+            {
+                "message": "TestPersonH e TestPersonK sono marito e moglie",
+                "effort": "auto",
+                "agent": "chat",
+            },
+            origin=f"http://127.0.0.1:{self.server.server_port}",
+        )
+
+        self.assertEqual(status, 200)
+        self.assertFalse(response["generated"])
+        self.assertIn("Ho aggiunto 1 relazione genealogica", response["response"])
+        tree_status, tree = self.request("GET", "/api/family-tree")
+        self.assertEqual(tree_status, 200)
+        self.assertEqual(
+            tree["spouse_pairs"],
+            [{"first": "TestPersonH", "second": "TestPersonK"}],
+        )
+        svg_status, svg = self.request("GET", "/api/family-tree.svg")
+        self.assertEqual(svg_status, 200)
+        self.assertIn(">coniugi</text>", svg)
+
+    def test_chat_adds_all_children_from_parent_with_multiple_children(self) -> None:
+        status, response = self.request(
+            "POST",
+            "/api/chat",
+            {
+                "message": "TestPersonH è il padre di TestPersonI e di TestPersonJ",
+                "effort": "auto",
+                "agent": "chat",
+            },
+            origin=f"http://127.0.0.1:{self.server.server_port}",
+        )
+
+        self.assertEqual(status, 200)
+        self.assertFalse(response["generated"])
+        self.assertIn("Ho aggiunto 2 relazioni genealogiche", response["response"])
+        tree_status, tree = self.request("GET", "/api/family-tree")
+        self.assertEqual(tree_status, 200)
+        self.assertEqual(
+            tree["parent_child"],
+            [
+                {"parent": "TestPersonH", "child": "TestPersonI"},
+                {"parent": "TestPersonH", "child": "TestPersonJ"},
+            ],
         )
 
     def test_saves_family_fact_without_swallowing_follow_up_question(self) -> None:
@@ -452,7 +527,7 @@ class WebInterfaceTests(unittest.TestCase):
                 "POST",
                 "/api/chat",
                 {
-                    "message": "Carlo è figlio di Anna. Quanti anni ha?",
+                    "message": "TestPersonB è figlio di TestPersonA. Quanti anni ha?",
                     "effort": "auto",
                     "agent": "chat",
                 },
@@ -464,7 +539,7 @@ class WebInterfaceTests(unittest.TestCase):
         self.assertEqual(response["response"], "Ha 42 anni.")
         self.assertEqual(
             self.app.family_tree()["parent_child"],
-            [{"parent": "Anna", "child": "Carlo"}],
+            [{"parent": "TestPersonA", "child": "TestPersonB"}],
         )
 
     def test_adds_and_removes_family_relations_through_api(self) -> None:
@@ -472,40 +547,109 @@ class WebInterfaceTests(unittest.TestCase):
         status, tree = self.request(
             "POST",
             "/api/family-tree",
-            {"action": "add", "parent": "Anna", "child": "Carlo"},
+            {"action": "add", "parent": "TestPersonA", "child": "TestPersonB"},
             origin=origin,
         )
         self.assertEqual(status, 200)
-        self.assertEqual(tree["people"], ["Anna", "Carlo"])
+        self.assertEqual(tree["people"], ["TestPersonA", "TestPersonB"])
 
         status, tree = self.request(
             "POST",
             "/api/family-tree",
-            {"action": "remove", "parent": "Anna", "child": "Carlo"},
+            {"action": "remove", "parent": "TestPersonA", "child": "TestPersonB"},
             origin=origin,
         )
         self.assertEqual(status, 200)
         self.assertEqual(tree["people"], [])
         self.assertEqual(tree["parent_child"], [])
 
+    def test_adds_and_removes_sibling_relations_through_api(self) -> None:
+        origin = f"http://127.0.0.1:{self.server.server_port}"
+        status, tree = self.request(
+            "POST",
+            "/api/family-tree",
+            {
+                "action": "add",
+                "parent": "TestPersonA",
+                "child": "TestPersonB",
+                "relation_type": "sibling",
+            },
+            origin=origin,
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(tree["people"], ["TestPersonA", "TestPersonB"])
+        self.assertEqual(
+            tree["sibling_pairs"],
+            [{"first": "TestPersonA", "second": "TestPersonB"}],
+        )
+
+        status, tree = self.request(
+            "POST",
+            "/api/family-tree",
+            {
+                "action": "remove",
+                "parent": "TestPersonA",
+                "child": "TestPersonB",
+                "relation_type": "sibling",
+            },
+            origin=origin,
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(tree["people"], [])
+        self.assertEqual(tree["sibling_pairs"], [])
+
+    def test_adds_and_removes_spouse_relations_through_api(self) -> None:
+        origin = f"http://127.0.0.1:{self.server.server_port}"
+        status, tree = self.request(
+            "POST",
+            "/api/family-tree",
+            {
+                "action": "add",
+                "parent": "TestPersonH",
+                "child": "TestPersonK",
+                "relation_type": "spouse",
+            },
+            origin=origin,
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(
+            tree["spouse_pairs"],
+            [{"first": "TestPersonH", "second": "TestPersonK"}],
+        )
+
+        status, tree = self.request(
+            "POST",
+            "/api/family-tree",
+            {
+                "action": "remove",
+                "parent": "TestPersonH",
+                "child": "TestPersonK",
+                "relation_type": "spouse",
+            },
+            origin=origin,
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(tree["people"], [])
+        self.assertEqual(tree["spouse_pairs"], [])
+
     def test_rejects_family_tree_cycles(self) -> None:
         origin = f"http://127.0.0.1:{self.server.server_port}"
         self.request(
             "POST",
             "/api/family-tree",
-            {"action": "add", "parent": "Anna", "child": "Carlo"},
+            {"action": "add", "parent": "TestPersonA", "child": "TestPersonB"},
             origin=origin,
         )
         self.request(
             "POST",
             "/api/family-tree",
-            {"action": "add", "parent": "Carlo", "child": "Luca"},
+            {"action": "add", "parent": "TestPersonB", "child": "TestPersonC"},
             origin=origin,
         )
         status, response = self.request(
             "POST",
             "/api/family-tree",
-            {"action": "add", "parent": "Luca", "child": "Anna"},
+            {"action": "add", "parent": "TestPersonC", "child": "TestPersonA"},
             origin=origin,
         )
 
@@ -514,14 +658,14 @@ class WebInterfaceTests(unittest.TestCase):
 
     def test_rejects_cycles_in_family_facts_from_chat(self) -> None:
         origin = f"http://127.0.0.1:{self.server.server_port}"
-        self.app.update_family_relation("add", "Anna", "Carlo")
-        self.app.update_family_relation("add", "Carlo", "Luca")
+        self.app.update_family_relation("add", "TestPersonA", "TestPersonB")
+        self.app.update_family_relation("add", "TestPersonB", "TestPersonC")
 
         status, response = self.request(
             "POST",
             "/api/chat",
             {
-                "message": "Luca è padre di Anna.",
+                "message": "TestPersonC è padre di TestPersonA.",
                 "effort": "auto",
                 "agent": "chat",
             },

@@ -29,11 +29,17 @@ from bitgenesis.effort import (
     is_effort_level,
 )
 from bitgenesis.family_tree import (
+    add_spouse_pair,
+    add_sibling_pair,
     add_parent_child,
     is_family_tree_statement,
     parse_family_relations,
+    parse_spouse_relations,
+    parse_sibling_relations,
     read_family_tree,
     remove_parent_child,
+    remove_sibling_pair,
+    remove_spouse_pair,
     render_family_tree_svg,
     save_family_tree,
 )
@@ -190,17 +196,33 @@ class WebApplication:
         action: str,
         parent: str,
         child: str,
+        relation_type: str = "parent_child",
     ) -> dict[str, object]:
         if action not in {"add", "remove"}:
             raise WebRequestError(400, "Azione per l'albero genealogico non valida.")
+        if relation_type not in {"parent_child", "sibling", "spouse"}:
+            raise WebRequestError(400, "Tipo di relazione genealogica non valido.")
         try:
             with self.lock:
                 tree = read_family_tree(self.family_tree_path)
-                changed = (
-                    add_parent_child(tree, parent, child)
-                    if action == "add"
-                    else remove_parent_child(tree, parent, child)
-                )
+                if relation_type == "spouse":
+                    changed = (
+                        add_spouse_pair(tree, parent, child)
+                        if action == "add"
+                        else remove_spouse_pair(tree, parent, child)
+                    )
+                elif relation_type == "sibling":
+                    changed = (
+                        add_sibling_pair(tree, parent, child)
+                        if action == "add"
+                        else remove_sibling_pair(tree, parent, child)
+                    )
+                else:
+                    changed = (
+                        add_parent_child(tree, parent, child)
+                        if action == "add"
+                        else remove_parent_child(tree, parent, child)
+                    )
                 if changed:
                     save_family_tree(self.family_tree_path, tree)
                 return tree
@@ -236,7 +258,9 @@ class WebApplication:
         clean_message = message.strip()
         language = detect_language(clean_message)
         family_relations = parse_family_relations(clean_message)
-        if family_relations:
+        sibling_relations = parse_sibling_relations(clean_message)
+        spouse_relations = parse_spouse_relations(clean_message)
+        if family_relations or sibling_relations or spouse_relations:
             with self.lock:
                 try:
                     tree = read_family_tree(self.family_tree_path)
@@ -250,7 +274,17 @@ class WebApplication:
                         for parent, child in family_relations
                         if add_parent_child(tree, parent, child)
                     ]
-                    if added_relations:
+                    added_siblings = [
+                        (first, second)
+                        for first, second in sibling_relations
+                        if add_sibling_pair(tree, first, second)
+                    ]
+                    added_spouses = [
+                        (first, second)
+                        for first, second in spouse_relations
+                        if add_spouse_pair(tree, first, second)
+                    ]
+                    if added_relations or added_siblings or added_spouses:
                         save_family_tree(self.family_tree_path, tree)
                 except ValueError as error:
                     raise WebRequestError(
@@ -262,14 +296,17 @@ class WebApplication:
                         f"Impossibile aggiornare l'albero genealogico: {error}",
                     ) from error
             if is_family_tree_statement(clean_message):
-                response = (
-                    f"Ho aggiunto {len(added_relations)} "
-                    f"{'relazione genealogica esplicita' if len(added_relations) == 1 else 'relazioni genealogiche esplicite'}."
-                    if language == "it"
-                    else f"I added {len(added_relations)} explicit "
-                    f"{'family relationship' if len(added_relations) == 1 else 'family relationships'}."
+                added_count = (
+                    len(added_relations) + len(added_siblings) + len(added_spouses)
                 )
-                if not added_relations:
+                response = (
+                    f"Ho aggiunto {added_count} "
+                    f"{'relazione genealogica esplicita' if added_count == 1 else 'relazioni genealogiche esplicite'}."
+                    if language == "it"
+                    else f"I added {added_count} explicit "
+                    f"{'family relationship' if added_count == 1 else 'family relationships'}."
+                )
+                if not added_count:
                     response = (
                         "Queste relazioni sono già presenti nell'albero genealogico."
                         if language == "it"
@@ -660,17 +697,17 @@ class LocalRequestHandler(BaseHTTPRequestHandler):
                 action = body.get("action")
                 parent = body.get("parent")
                 child = body.get("child")
+                relation_type = body.get("relation_type", "parent_child")
                 if not all(
                     isinstance(value, str)
-                    for value in (action, parent, child)
+                    for value in (action, parent, child, relation_type)
                 ):
-                    raise WebRequestError(
-                        400, "Specifica un'azione, un genitore e un figlio."
-                    )
+                    raise WebRequestError(400, "Dati della relazione non validi.")
                 result = self.server.app.update_family_relation(
                     action,
                     parent,
                     child,
+                    relation_type,
                 )
             else:
                 self._send_json(404, {"error": "Endpoint non trovato."})

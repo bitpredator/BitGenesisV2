@@ -45,7 +45,7 @@ aside, .chat-panel { border: 1px solid var(--border); border-radius: 1rem; backg
 .tree-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
 .tree-heading h2 { margin-bottom: 0.4rem; }
 .tree-heading a { color: var(--accent); }
-.tree-form { display: grid; grid-template-columns: 1fr 1fr auto; align-items: end; gap: 0.7rem; }
+.tree-form { display: grid; grid-template-columns: 1fr 1fr 1fr auto; align-items: end; gap: 0.7rem; }
 .tree-form label { margin: 0; }
 .family-tree-visualization { margin-top: 0.75rem; overflow: auto; border: 1px solid var(--border); border-radius: 0.75rem; }
 .family-tree-visualization img { display: block; min-width: 640px; max-width: 100%; height: auto; }

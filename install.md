@@ -79,15 +79,20 @@ passaggi numerati” are saved to `Preferenze.md` in the directory where
 BitGenesis was started and included in subsequent prompts. Ambiguous messages
 are not used to infer preferences. Use `/preferenze mostra`,
 
-To build a local family tree, state an explicit parent-child relationship in
-chat, such as `Carlo è figlio di Anna.` or `My father is Marco.`. BitGenesis
-updates `AlberoGenealogico.json` and its ordered SVG graphic after each
-recognized statement. The web interface shows the evolving tree and lets you
-add or remove relationships manually. In terminal chat use `/albero mostra`,
-`/albero aggiungi <genitore> -> <figlio>`, and
-`/albero rimuovi <genitore> -> <figlio>`. Only explicit relationships are
-recorded; inferred links are not added. The JSON and SVG files stay local and
-are ignored by Git. Use `/preferenze mostra`,
+To build a local family tree, state an explicit relationship in chat.
+BitGenesis updates
+`AlberoGenealogico.json` and its ordered SVG graphic after each recognized
+statement; siblings and spouses are shown at the same generation with
+distinct connectors. The web interface shows the evolving tree and lets you add or
+remove both kinds of relationships manually. In terminal chat use
+`/albero mostra`, `/albero aggiungi <genitore> -> <figlio>`,
+`/albero rimuovi <genitore> -> <figlio>`,
+`/albero aggiungi fratelli <nome> -> <nome>`, or
+`/albero rimuovi fratelli <nome> -> <nome>`,
+`/albero aggiungi coniugi <nome> -> <nome>`, or
+`/albero rimuovi coniugi <nome> -> <nome>`. Only explicitly stated
+relationships are recorded; inferred links are not added. The JSON and SVG
+files stay local and are ignored by Git. Use `/preferenze mostra`,
 `/preferenze aggiungi <testo>`, and `/preferenze sostituisci <testo>` in the
 terminal, or manage them in the web interface. `Preferenze.md` is ignored by
 Git because it may contain personal information.
