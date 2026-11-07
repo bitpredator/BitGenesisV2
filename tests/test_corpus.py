@@ -311,6 +311,11 @@ class LoadConversationsTests(unittest.TestCase):
             for record in records
             if record.path.name == "comandi_bitgenesis.jsonl"
         ]
+        command_paths = [
+            record.path
+            for record in records
+            if record.path.name.startswith("comandi_bitgenesis")
+        ]
         lesson_text = "\n".join(
             message
             for conversation in lessons
@@ -319,6 +324,10 @@ class LoadConversationsTests(unittest.TestCase):
         )
 
         self.assertEqual(len(lessons), 6)
+        self.assertEqual(len(command_paths), 12)
+        self.assertTrue(
+            all(path.parent.name == "commands" for path in command_paths)
+        )
         for command in (
             "/compact",
             "/impegno auto",

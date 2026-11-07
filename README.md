@@ -172,6 +172,8 @@ includes both languages. This adds bilingual training examples but does not
 guarantee that the experimental model will consistently understand or answer
 in either language. The configuration still specifies Italian as its default;
 chat replies follow message-language detection and use English when unclear.
+BitGenesis command-training datasets are grouped under
+`data/datasets/commands/`.
 The Italian and English conversation sets also include paired examples that
 explain calculations, code fixes, testing, planning, and comparisons in steps.
 The three Italian stories are also available as complete assistant responses
