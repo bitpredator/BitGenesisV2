@@ -20,6 +20,7 @@ class WebInterfaceTests(unittest.TestCase):
         self.model_path = root / "models" / "bitgenesis.pt"
         self.tokenizer_path = root / "models" / "tokenizer.json"
         self.genesis_path = root / "Genesis.md"
+        self.preferences_path = root / "Preferenze.md"
         config = replace(
             load_config(),
             datasets_dir=root / "datasets",
@@ -34,6 +35,7 @@ class WebInterfaceTests(unittest.TestCase):
             temperature=1.0,
             effort="auto",
             genesis_path=self.genesis_path,
+            preferences_path=self.preferences_path,
         )
         self.server = LocalHTTPServer(("127.0.0.1", 0), self.app)
         self.addCleanup(self.server.server_close)
@@ -349,6 +351,64 @@ class WebInterfaceTests(unittest.TestCase):
             self.genesis_path.read_text(encoding="utf-8"),
             "# Istruzioni permanenti per BitGenesis\n\nUsa risposte concise.\n",
         )
+
+    def test_saves_and_reads_explicit_work_preferences(self) -> None:
+        status, response = self.request(
+            "POST",
+            "/api/chat",
+            {
+                "message": "Preferisco risposte brevi e passaggi numerati.",
+                "effort": "auto",
+                "agent": "chat",
+            },
+            origin=f"http://127.0.0.1:{self.server.server_port}",
+        )
+
+        self.assertEqual(status, 200)
+        self.assertFalse(response["generated"])
+        self.assertIn("Ho salvato", response["response"])
+        self.assertEqual(
+            self.preferences_path.read_text(encoding="utf-8"),
+            "# Preferenze di lavoro dell'utente\n\n"
+            "- Preferisco risposte brevi e passaggi numerati.\n",
+        )
+        read_status, stored = self.request("GET", "/api/preferences")
+        self.assertEqual(read_status, 200)
+        self.assertEqual(
+            stored["preferences"],
+            "- Preferisco risposte brevi e passaggi numerati.",
+        )
+
+    def test_manual_preferences_are_saved_and_used_in_model_prompt(self) -> None:
+        self.model_path.parent.mkdir(parents=True)
+        self.model_path.touch()
+        self.tokenizer_path.touch()
+        status, response = self.request(
+            "POST",
+            "/api/preferences",
+            {"action": "append", "text": "Preferisco risposte concise."},
+            origin=f"http://127.0.0.1:{self.server.server_port}",
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(response["preferences"], "- Preferisco risposte concise.")
+
+        with patch("bitgenesis.generate.ConversationChat") as chat_class:
+            chat_class.return_value.reply.return_value = "Risposta."
+            chat_status, _reply = self.request(
+                "POST",
+                "/api/chat",
+                {
+                    "message": "Come posso organizzare il mio lavoro?",
+                    "effort": "auto",
+                    "agent": "chat",
+                },
+                origin=f"http://127.0.0.1:{self.server.server_port}",
+            )
+
+        self.assertEqual(chat_status, 200)
+        prompt = chat_class.return_value.reply.call_args.args[0]
+        self.assertIn("Preferenze di lavoro dell'utente", prompt)
+        self.assertIn("- Preferisco risposte concise.", prompt)
 
     def test_rejects_invalid_chat_settings(self) -> None:
         status, response = self.request(

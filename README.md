@@ -64,9 +64,9 @@ Choose between two profiles in the same chat with `/agente chat` or
 `/agente coding`; `/agente` displays the active profile. Chat is the default.
 The coding profile guides responses toward understanding, writing, fixing, and
 testing code, while the chat profile is for general conversation. Both
-profiles share the same local model, conversation history, and `Genesis.md`
-instructions; they are not separately trained models, and their capabilities
-depend on the training data.
+profiles share the same local model, conversation history, project
+`Genesis.md` instructions, and user `Preferenze.md`; they are not separately
+trained models, and their capabilities depend on the training data.
 For explicit requests to introduce itself or describe its capabilities, both
 interfaces use a short factual response instead of the experimental model.
 Standalone greetings such as `Ciao` also get a short, deterministic response;
@@ -82,6 +82,15 @@ the current text. The file is read for each reply and included in the chat
 context; BitGenesis changes it only through these explicit commands, not by
 guessing from ordinary conversation. The experimental model may not reliably
 follow the instructions.
+
+BitGenesis saves explicit work preferences separately in `Preferenze.md` in
+the directory where it was started. Statements such as “Preferisco risposte
+brevi e passaggi numerati” are recognized and saved automatically; ambiguous
+messages are not used to infer preferences. Use `/preferenze mostra`,
+`/preferenze aggiungi <testo>`, and `/preferenze sostituisci <testo>` in the
+terminal, or the Preferenze di lavoro panel in the web interface to review and
+edit them. The file is ignored by Git because it may contain personal
+preferences.
 
 In local mode BitGenesis addresses the person using it as `Utente` in Italian
 and `User` in English; there is no local nickname setting. Choosing a personal
@@ -99,8 +108,9 @@ python -m bitgenesis --web
 
 BitGenesis opens its local page in your browser. The interface lets you chat
 with the local model, choose the chat or coding profile and generation effort,
-manage `Genesis.md`, and start or monitor conversational training from the
-included `.jsonl` data. Training runs on the computer and may take time.
+manage `Genesis.md` and `Preferenze.md`, and start or monitor conversational
+training from the included `.jsonl` data. Training runs on the computer and
+may take time.
 The web server listens only on `127.0.0.1`; it is not available to other
 devices on the network. Keep the terminal window open while using the page;
 press `Ctrl+C` there to stop the server. Use `--port 8766` to select another
@@ -108,7 +118,7 @@ local port if the default port is busy.
 
 The chat and its history are kept in memory for the current server session.
 Closing or restarting the server clears the conversation. Model files and
-project instructions remain on the computer.
+project instructions and user preferences remain on the computer.
 
 To compare the effort levels on a small, fixed prompt set, train a conversation
 model and run:

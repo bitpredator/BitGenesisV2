@@ -29,6 +29,11 @@ from bitgenesis.generate import (
     ConversationChat,
 )
 from bitgenesis.language import detect_language
+from bitgenesis.preferences import (
+    detect_work_preference,
+    read_preferences,
+    update_preferences,
+)
 from bitgenesis.retrieval import LocalKnowledgeBase
 from bitgenesis.tokenizer import BPETokenizer
 
@@ -63,6 +68,8 @@ def _write_welcome(
     write_output(
         f"  |{'/genesis gestisce istruzioni permanenti.'.center(_BANNER_WIDTH)}|"
     )
+    preference_hint = "/preferenze gestisce le preferenze di lavoro."
+    write_output(f"  |{preference_hint.center(_BANNER_WIDTH)}|")
     write_output(f"  |{'/agente chat|coding seleziona il profilo.'.center(_BANNER_WIDTH)}|")
     effort_hint = "/impegno auto|minimo|medio|alto cambia il livello."
     write_output(f"  |{effort_hint.center(_BANNER_WIDTH)}|")
@@ -86,6 +93,7 @@ def run_chat(
     effort: EffortLevel = "auto",
     genesis_path: Path | None = None,
     knowledge_directory: Path | None = None,
+    preferences_path: Path | None = None,
 ) -> None:
     """Run the terminal chat using a saved local model when available."""
     read_input = input if input_fn is None else input_fn
@@ -97,6 +105,11 @@ def run_chat(
         Path(__file__).resolve().parents[1] / "data" / "datasets"
         if knowledge_directory is None
         else Path(knowledge_directory)
+    )
+    user_preferences_path = (
+        Path.cwd() / "Preferenze.md"
+        if preferences_path is None
+        else Path(preferences_path)
     )
 
     model_files_found = (
@@ -201,6 +214,47 @@ def run_chat(
                     "/genesis sostituisci <testo>."
                 )
             continue
+        if command and command[0] == "/preferenze":
+            parts = message.strip().split(maxsplit=2)
+            action = parts[1].casefold() if len(parts) > 1 else ""
+            if action == "mostra" and len(parts) == 2:
+                try:
+                    preferences = read_preferences(user_preferences_path)
+                except (OSError, UnicodeError) as error:
+                    write_output(
+                        f"  BitGenesis > Non riesco a leggere "
+                        f"{user_preferences_path}: {error}"
+                    )
+                else:
+                    write_output(
+                        f"  BitGenesis > Preferenze in {user_preferences_path}:\n"
+                        f"{preferences or 'Nessuna preferenza salvata.'}"
+                    )
+            elif action in {"aggiungi", "sostituisci"} and len(parts) == 3:
+                try:
+                    update_preferences(
+                        user_preferences_path,
+                        parts[2],
+                        replace=action == "sostituisci",
+                    )
+                except (OSError, ValueError) as error:
+                    write_output(
+                        f"  BitGenesis > Non riesco ad aggiornare "
+                        f"{user_preferences_path}: {error}"
+                    )
+                else:
+                    verb = "aggiunte" if action == "aggiungi" else "aggiornate"
+                    write_output(
+                        f"  BitGenesis > Preferenze {verb} in "
+                        f"{user_preferences_path}."
+                    )
+            else:
+                write_output(
+                    "  BitGenesis > Usa /preferenze mostra, "
+                    "/preferenze aggiungi <testo> oppure "
+                    "/preferenze sostituisci <testo>."
+                )
+            continue
         if message.strip().casefold() == "/compact":
             if not history:
                 write_output(
@@ -257,6 +311,30 @@ def run_chat(
             continue
         if message.strip():
             language = detect_language(message)
+            preference = detect_work_preference(message)
+            if preference is not None:
+                try:
+                    added = update_preferences(user_preferences_path, preference)
+                except (OSError, ValueError) as error:
+                    write_output(
+                        f"  BitGenesis > Non riesco a salvare la preferenza in "
+                        f"{user_preferences_path}: {error}"
+                    )
+                    continue
+                response = (
+                    "Ho salvato questa preferenza di lavoro."
+                    if added
+                    else "Questa preferenza di lavoro è già salvata."
+                )
+                if language == "en":
+                    response = (
+                        "I saved this work preference."
+                        if added
+                        else "This work preference is already saved."
+                    )
+                write_output(f"  BitGenesis > {response}")
+                history.append((message.strip(), response))
+                continue
             bitpredator = bitpredator_response(message, language)
             if bitpredator is not None:
                 write_output(f"  BitGenesis > {bitpredator}")
@@ -321,6 +399,7 @@ def run_chat(
             chat_history = list(history)
             try:
                 project_instructions = read_instructions(project_genesis_path)
+                user_preferences = read_preferences(user_preferences_path)
             except (OSError, UnicodeError) as error:
                 write_output(
                     f"  BitGenesis > Non riesco a leggere "
@@ -332,6 +411,7 @@ def run_chat(
                 current_agent,
                 project_instructions,
                 language,
+                user_preferences,
             )
             chat_history.append(local_user_rule(language))
             if isinstance(chat.tokenizer, BPETokenizer):

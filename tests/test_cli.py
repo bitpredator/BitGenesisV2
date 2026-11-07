@@ -545,6 +545,76 @@ class RunChatTests(unittest.TestCase):
             {"max_new_tokens": 20, "temperature": 1.0},
         )
 
+    def test_saves_explicit_work_preferences_and_displays_them(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            messages = iter(
+                [
+                    "Preferisco risposte brevi e passaggi numerati.",
+                    "/preferenze mostra",
+                    "esci",
+                ]
+            )
+            output: list[str] = []
+            preferences_path = Path(temp_dir) / "Preferenze.md"
+
+            run_chat(
+                input_fn=lambda _prompt: next(messages),
+                output_fn=output.append,
+                preferences_path=preferences_path,
+            )
+
+            self.assertEqual(
+                preferences_path.read_text(encoding="utf-8"),
+                "# Preferenze di lavoro dell'utente\n\n"
+                "- Preferisco risposte brevi e passaggi numerati.\n",
+            )
+            self.assertIn(
+                "  BitGenesis > Ho salvato questa preferenza di lavoro.",
+                output,
+            )
+            self.assertTrue(
+                any(
+                    "Preferenze in" in line
+                    and "- Preferisco risposte brevi e passaggi numerati."
+                    in line
+                    for line in output
+                )
+            )
+
+    def test_includes_saved_work_preferences_in_model_prompt(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            messages = iter(["Come organizzo questa attività?", "esci"])
+            output: list[str] = []
+            preferences_path = Path(temp_dir) / "Preferenze.md"
+            preferences_path.write_text(
+                "# Preferenze di lavoro dell'utente\n\n"
+                "- Preferisco risposte brevi.\n",
+                encoding="utf-8",
+            )
+
+            with (
+                patch.object(Path, "is_file", return_value=True),
+                patch("bitgenesis.__main__.ConversationChat") as chat_class,
+                patch(
+                    "bitgenesis.__main__.LocalKnowledgeBase.from_directory"
+                ) as knowledge_base_factory,
+            ):
+                chat_class.return_value.reply.return_value = "Risposta."
+                knowledge_base_factory.return_value.answer_from_sources.return_value = (
+                    None
+                )
+                run_chat(
+                    input_fn=lambda _prompt: next(messages),
+                    output_fn=output.append,
+                    model_path=Path("model.pt"),
+                    tokenizer_path=Path("tokenizer.json"),
+                    preferences_path=preferences_path,
+                )
+
+            prompt = chat_class.return_value.reply.call_args.args[0]
+            self.assertIn("Preferenze di lavoro dell'utente", prompt)
+            self.assertIn("- Preferisco risposte brevi.", prompt)
+
     def test_genesis_replace_replaces_previous_instructions(self) -> None:
         messages = iter(
             [

@@ -93,6 +93,7 @@ def build_response_prompt(
     agent: AgentName,
     project_instructions: str,
     language: Language,
+    user_preferences: str = "",
 ) -> str:
     """Build the same language-aware prompt for terminal and web chats."""
     sections = []
@@ -110,6 +111,15 @@ def build_response_prompt(
             else "Istruzioni permanenti del progetto da Genesis.md:"
         )
         sections.append(f"{heading}\n{project_instructions}")
+    if user_preferences:
+        heading = (
+            "User's saved work preferences from Preferenze.md "
+            "(follow when relevant; the current request takes priority):"
+            if language == "en"
+            else "Preferenze di lavoro dell'utente da Preferenze.md "
+            "(segui quando pertinenti; la richiesta attuale ha la precedenza):"
+        )
+        sections.append(f"{heading}\n{user_preferences}")
 
     normalized_message = unicodedata.normalize("NFKD", message.casefold())
     normalized_message = "".join(

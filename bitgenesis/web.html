@@ -38,6 +38,19 @@
         </section>
 
         <section class="section">
+          <h2>Preferenze di lavoro</h2>
+          <p class="hint">Le preferenze esplicite vengono salvate in Preferenze.md e usate nelle risposte successive.</p>
+          <label for="preferences-input">Testo da aggiungere o sostituire</label>
+          <textarea id="preferences-input" placeholder="Es. Preferisco risposte brevi e passaggi numerati."></textarea>
+          <div class="button-row">
+            <button id="append-preferences" type="button">Aggiungi</button>
+            <button id="replace-preferences" type="button">Sostituisci</button>
+          </div>
+          <label for="stored-preferences">Preferenze attuali</label>
+          <pre id="stored-preferences" class="hint">Caricamento...</pre>
+        </section>
+
+        <section class="section">
           <h2>Istruzioni del progetto</h2>
           <p class="hint">Salvate in Genesis.md nella cartella da cui hai avviato BitGenesis.</p>
           <label for="instructions-input">Testo da aggiungere o sostituire</label>
@@ -86,6 +99,8 @@
     const trainButton = document.querySelector("#train");
     const instructionsInput = document.querySelector("#instructions-input");
     const storedInstructions = document.querySelector("#stored-instructions");
+    const preferencesInput = document.querySelector("#preferences-input");
+    const storedPreferences = document.querySelector("#stored-preferences");
 
     async function request(path, options = {}) {
       const response = await fetch(path, {
@@ -155,6 +170,7 @@
           ? `BitGenesis · impegno ${result.effort}`
           : "BitGenesis · risposta informativa";
         addMessage("assistant", result.response, label);
+        await refreshPreferences();
       } catch (error) {
         chatError.textContent = error.message;
       } finally {
@@ -200,6 +216,27 @@
     document.querySelector("#append-instructions").addEventListener("click", () => saveInstructions("append"));
     document.querySelector("#replace-instructions").addEventListener("click", () => saveInstructions("replace"));
 
+    async function refreshPreferences() {
+      const result = await request("/api/preferences");
+      storedPreferences.textContent = result.preferences || "Nessuna preferenza salvata.";
+    }
+
+    async function savePreferences(action) {
+      try {
+        const result = await request("/api/preferences", {
+          method: "POST",
+          body: JSON.stringify({ action, text: preferencesInput.value }),
+        });
+        storedPreferences.textContent = result.preferences || "Nessuna preferenza salvata.";
+        preferencesInput.value = "";
+      } catch (error) {
+        chatError.textContent = error.message;
+      }
+    }
+
+    document.querySelector("#append-preferences").addEventListener("click", () => savePreferences("append"));
+    document.querySelector("#replace-preferences").addEventListener("click", () => savePreferences("replace"));
+
     trainButton.addEventListener("click", async () => {
       const steps = Number(document.querySelector("#steps").value);
       trainButton.disabled = true;
@@ -219,6 +256,8 @@
       .then((result) => {
         storedInstructions.textContent = result.instructions || "Nessuna istruzione salvata.";
       })
+      .catch((error) => { chatError.textContent = error.message; });
+    refreshPreferences()
       .catch((error) => { chatError.textContent = error.message; });
     refreshStatus();
     window.setInterval(refreshStatus, 2000);

@@ -30,6 +30,11 @@ from bitgenesis.effort import (
 )
 from bitgenesis.genesis import read_instructions, update_instructions
 from bitgenesis.language import detect_language
+from bitgenesis.preferences import (
+    detect_work_preference,
+    read_preferences,
+    update_preferences,
+)
 from bitgenesis.retrieval import LocalKnowledgeBase
 from bitgenesis.tokenizer import BPETokenizer
 
@@ -61,6 +66,7 @@ class WebApplication:
         temperature: float,
         effort: EffortLevel,
         genesis_path: Path | None = None,
+        preferences_path: Path | None = None,
     ) -> None:
         self.config = config
         self.model_path = Path(model_path)
@@ -72,6 +78,11 @@ class WebApplication:
             Path.cwd() / "Genesis.md"
             if genesis_path is None
             else Path(genesis_path)
+        )
+        self.preferences_path = (
+            Path.cwd() / "Preferenze.md"
+            if preferences_path is None
+            else Path(preferences_path)
         )
         self.history: list[tuple[str, str]] = []
         self.chat: ConversationChat | None = None
@@ -120,6 +131,36 @@ class WebApplication:
             ) from error
         return self.instructions()
 
+    def preferences(self) -> str:
+        try:
+            return read_preferences(self.preferences_path)
+        except (OSError, UnicodeError) as error:
+            raise WebRequestError(
+                500, f"Impossibile leggere le preferenze: {error}"
+            ) from error
+
+    def save_preferences(self, action: str, text: str) -> str:
+        if action not in {"append", "replace"}:
+            raise WebRequestError(400, "Azione per le preferenze non valida.")
+        if not text.strip():
+            raise WebRequestError(400, "Le preferenze non possono essere vuote.")
+        try:
+            with self.lock:
+                update_preferences(
+                    self.preferences_path,
+                    text,
+                    replace=action == "replace",
+                )
+        except ValueError as error:
+            raise WebRequestError(
+                400, f"Impossibile aggiornare le preferenze: {error}"
+            ) from error
+        except OSError as error:
+            raise WebRequestError(
+                500, f"Impossibile aggiornare le preferenze: {error}"
+            ) from error
+        return self.preferences()
+
     def reset_chat(self) -> None:
         with self.lock:
             self.history.clear()
@@ -140,6 +181,33 @@ class WebApplication:
         selected_agent = cast(AgentName, agent)
         clean_message = message.strip()
         language = detect_language(clean_message)
+        preference = detect_work_preference(clean_message)
+        if preference is not None:
+            try:
+                with self.lock:
+                    added = update_preferences(self.preferences_path, preference)
+            except (OSError, ValueError) as error:
+                raise WebRequestError(
+                    500, f"Impossibile salvare la preferenza: {error}"
+                ) from error
+            response = (
+                "Ho salvato questa preferenza di lavoro."
+                if language == "it"
+                else "I saved this work preference."
+            )
+            if not added:
+                response = (
+                    "Questa preferenza di lavoro è già salvata."
+                    if language == "it"
+                    else "This work preference is already saved."
+                )
+            with self.lock:
+                self.history.append((clean_message, response))
+            return {
+                "response": response,
+                "effort": "non applicato",
+                "generated": False,
+            }
         bitpredator = bitpredator_response(clean_message, language)
         if bitpredator is not None:
             with self.lock:
@@ -232,6 +300,7 @@ class WebApplication:
                         )
                     knowledge_base = self.knowledge_base
                 project_instructions = self.instructions()
+                user_preferences = self.preferences()
             except WebRequestError:
                 raise
             except Exception as error:
@@ -244,6 +313,7 @@ class WebApplication:
                 selected_agent,
                 project_instructions,
                 language,
+                user_preferences,
             )
             selected_effort = choose_effort(clean_message, cast(EffortLevel, effort))
             token_budget = effort_token_budget(
@@ -423,6 +493,14 @@ class LocalRequestHandler(BaseHTTPRequestHandler):
                 )
             except WebRequestError as error:
                 self._send_json(error.status, {"error": str(error)})
+        elif route == "/api/preferences":
+            try:
+                self._send_json(
+                    200,
+                    {"preferences": self.server.app.preferences()},
+                )
+            except WebRequestError as error:
+                self._send_json(error.status, {"error": str(error)})
         else:
             self._send_json(404, {"error": "Pagina non trovata."})
 
@@ -449,6 +527,16 @@ class LocalRequestHandler(BaseHTTPRequestHandler):
                     )
                 result = {
                     "instructions": self.server.app.save_instructions(action, text)
+                }
+            elif route == "/api/preferences":
+                action = body.get("action")
+                text = body.get("text")
+                if not isinstance(action, str) or not isinstance(text, str):
+                    raise WebRequestError(
+                        400, "Specifica un'azione e il testo delle preferenze."
+                    )
+                result = {
+                    "preferences": self.server.app.save_preferences(action, text)
                 }
             else:
                 self._send_json(404, {"error": "Endpoint non trovato."})

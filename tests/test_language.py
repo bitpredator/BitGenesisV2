@@ -17,6 +17,7 @@ class LanguageDetectionTests(unittest.TestCase):
             ("Spiegami come funziona questo programma.", "it"),
             ("Potresti aiutarmi con questo?", "it"),
             ("Rendilo più informale.", "it"),
+            ("Preferisco modifiche minime.", "it"),
             ("What can I do to organize my work?", "en"),
             ("Ciao", "it"),
             ("Hello", "en"),

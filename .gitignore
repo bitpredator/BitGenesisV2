@@ -39,6 +39,7 @@ data/datasets/*
 !data/datasets/it-stories/*.txt
 data/models/
 NEXT_STEPS.md
+Preferenze.md
 
 # Build output and logs
 build/

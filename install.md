@@ -74,6 +74,14 @@ The model starts with random weights; the result depends on the amount,
 quality, and permitted use of your local text. Training a tiny example is not
 expected to produce useful conversational behavior.
 
+During chat, explicit work preferences such as “Preferisco risposte brevi e
+passaggi numerati” are saved to `Preferenze.md` in the directory where
+BitGenesis was started and included in subsequent prompts. Ambiguous messages
+are not used to infer preferences. Use `/preferenze mostra`,
+`/preferenze aggiungi <testo>`, and `/preferenze sostituisci <testo>` in the
+terminal, or manage them in the web interface. `Preferenze.md` is ignored by
+Git because it may contain personal information.
+
 ## Configure generation and model defaults
 
 Edit `config.toml` to set the default generation length and temperature, the
